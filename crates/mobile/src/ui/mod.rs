@@ -84,6 +84,7 @@ mod edit;
 mod menu;
 mod node;
 mod publish;
+mod rail;
 mod shell;
 
 pub use catalogue::{catalogue_json, catalogue_markdown};
@@ -95,6 +96,7 @@ pub use node::{
 };
 pub(crate) use publish::PanelsState;
 use publish::Published;
+pub use rail::{Icon, Tool, ToolId, ToolPalette, ToolSlot};
 pub use shell::{Feature, ShellFeatures, UnknownFeature};
 
 /// A node that can't be built as asked.
@@ -161,5 +163,27 @@ pub enum UiError {
     DuplicateCommand {
         /// The repeated command.
         command: CommandId,
+    },
+    /// A tool palette has a slot without tools.
+    #[error("palette `{palette}`: a slot has no tools")]
+    EmptySlot {
+        /// The palette.
+        palette: ControlId,
+    },
+    /// Two tools of a palette share an id.
+    #[error("palette `{palette}`: tool `{tool}` appears twice")]
+    DuplicateTool {
+        /// The palette.
+        palette: ControlId,
+        /// The repeated tool.
+        tool: ToolId,
+    },
+    /// A palette's selected tool isn't one of its tools.
+    #[error("palette `{palette}`: the selected tool `{tool}` isn't one of its tools")]
+    UnknownTool {
+        /// The palette.
+        palette: ControlId,
+        /// The tool given.
+        tool: ToolId,
     },
 }

@@ -46,6 +46,9 @@ struct GalleryApp: App {
                 store: store, panel: store.everythingPanel(role:))
         } else if selection == "menu_bar", let chrome = store.chrome.first(where: { $0.id == "menu_bar" }) {
             GalleryMenuDetail(about: chrome.about, store: store)
+        } else if selection == "tool_palette", let entry = store.entries.first(where: { $0.id == selection }) {
+            GalleryDetail(title: entry.name, about: entry.about, store: store) { store.panel(for: entry, role: $0) }
+                .overlay(alignment: .leading) { GalleryRail(store: store).padding(.leading, 16) }
         } else if let entry = store.entries.first(where: { $0.id == selection }) {
             GalleryDetail(title: entry.name, about: entry.about, store: store) { store.panel(for: entry, role: $0) }
         } else {
@@ -180,6 +183,24 @@ struct GalleryKeyProbe: UIViewRepresentable {
 
         static func describe(_ flags: UIKeyModifierFlags) -> String {
             [(UIKeyModifierFlags.control, "⌃"), (.alternate, "⌥"), (.shift, "⇧"), (.command, "⌘")].filter { flags.contains($0.0) }.map(\.1).joined()
+        }
+    }
+}
+
+/// The catalogue's tool palette as the shell's rail: picks are applied and logged; options open a
+/// stand-in Tool panel as a popover from the rail, or log the fallback command.
+struct GalleryRail: View {
+    let store: GalleryStore
+    @State private var options: String?
+
+    var body: some View {
+        if let palette = store.palette {
+            CraftRailView(
+                palette: palette, panel: "tools", send: store.send,
+                command: { store.logMessage(CraftChromeMessage.command($0)) }, optionsPanel: $options
+            ) { id in
+                CraftPanelView(panel: store.optionsPanel(id), send: store.send)
+            }
         }
     }
 }

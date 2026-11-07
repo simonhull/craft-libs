@@ -6,8 +6,8 @@ use std::fmt::Write as _;
 use serde::Serialize;
 
 use super::{
-    Choice, ChoiceOption, Edit, EditValue, ItemList, Menu, MenuBar, MenuEntry, Message, Node, Number, Panel, PanelInfo, PanelRole, Phase, Position,
-    Published, Row, Scale, Section, Toggle, Unit,
+    Choice, ChoiceOption, Edit, EditValue, Icon, ItemList, Menu, MenuBar, MenuEntry, Message, Node, Number, Panel, PanelInfo, PanelRole, Phase,
+    Position, Published, Row, Scale, Section, Toggle, Tool, ToolPalette, ToolSlot, Unit,
 };
 
 /// The catalogue's format version; bump it when a node's JSON changes.
@@ -115,7 +115,33 @@ fn examples() -> Vec<Primitive> {
         ),
         edit: Some(edit("layers", Phase::Commit, 10, EditValue::Move { row: 1.into(), target: 2.into(), position: Position::Above })),
     });
+    if let Ok(palette) = example_palette() {
+        out.push(Primitive {
+            name: "tool_palette",
+            about: "The app's tools, in a panel with the `rail` role: a vertical Liquid Glass rail at the canvas's leading edge. Tap a tool to select it; long-press a slot (a small corner mark says it has more) for its flyout of the other tools; double-tap the selected tool, or the rail's options button, for its options.",
+            fields: "`slots`, top to bottom, each with `tools`: the slot shows the selected tool when it holds it, else its first. A tool has an `id` (unique in the palette), a `label`, an `icon` (`symbol`, an SF Symbol name; `letter`, shown when the platform has no such symbol; the label's first letter when neither works) and a `shortcut` or `null`. `selected` is one of the tools. `options` names the app's Tool panel for the selected tool's options; without one, `fallback_options` is a command that shows them the app's own way; both `null`: no options.",
+            sends: "one `choice` edit with the tool's `id`, `commit`, when a tool is tapped or picked from a flyout. Options open the `options` panel as a popover from the rail, or send `{\"action\":\"command\",\"id\":…}` with `fallback_options`.",
+            example: Node::ToolPalette(palette),
+            edit: Some(edit_in("tools", "palette", Phase::Commit, 11, EditValue::Choice("pencil".into()))),
+        });
+    }
     out
+}
+
+/// A palette for the catalogue: a one-tool slot, a slot with a flyout, a letter-only icon, and
+/// options in a Tool panel.
+fn example_palette() -> Result<ToolPalette, super::UiError> {
+    let slots = vec![
+        ToolSlot::one(
+            Tool::new("move", "Move", Icon::symbol("arrow.up.and.down.and.arrow.left.and.right").or_letter('V')).shortcut("V".parse().ok()),
+        ),
+        ToolSlot::new(vec![
+            Tool::new("brush", "Brush", Icon::symbol("paintbrush.pointed").or_letter('B')).shortcut("B".parse().ok()),
+            Tool::new("pencil", "Pencil", Icon::symbol("pencil").or_letter('N')).shortcut("N".parse().ok()),
+        ]),
+        ToolSlot::one(Tool::new("smudge", "Smudge", Icon::letter('S'))),
+    ];
+    Ok(ToolPalette::new("palette", slots, "brush")?.options(Some("brush".into())).fallback_options(Some("window.toggle.optionsBar".into())))
 }
 
 /// A menu bar for the catalogue: a command with a shortcut, a disabled one, a separator, a
@@ -227,7 +253,8 @@ fn wire_markdown() -> String {
          panel it offers, and `open`, the open ones described, by id. Each entry of `panels` has an \
          `id`, a `title`, an `icon` (an SF Symbol name; Android maps it to a Material icon) and a \
          `role`: `inspector` slides in beside the canvas, `tool` is a popover from its toolbar \
-         button.\n\n",
+         button, `rail` is a vertical rail at the canvas's leading edge, always on screen (its \
+         `tool_palette`).\n\n",
     );
     let _ = write!(s, "```json\n{}\n```\n", serde_json::to_string_pretty(&published).unwrap_or_default());
     s.push_str(
@@ -306,7 +333,7 @@ mod tests {
     #[test]
     fn every_primitive_has_an_example() {
         let names: Vec<_> = examples().iter().map(|e| e.name).collect();
-        for t in ["section", "number", "toggle", "choice", "item_list"] {
+        for t in ["section", "number", "toggle", "choice", "item_list", "tool_palette"] {
             assert!(names.contains(&t), "{t}");
         }
     }

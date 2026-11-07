@@ -37,6 +37,9 @@ struct CraftPanelTools: View {
                     .popover(isPresented: Binding(get: { popover == info.id }, set: { if !$0, popover == info.id { popover = nil } })) {
                         CraftPopover { CraftPanelHost(bridge: bridge, id: info.id) }
                     }
+            case .rail:
+                // The rail is beside the canvas (`CraftShellRail`), not a toolbar button.
+                EmptyView()
             }
         }
     }
@@ -121,9 +124,35 @@ struct CraftPanelOpener: View {
                         inspectorShown = true
                     case .tool:
                         popover = info.id
+                    case .rail:
+                        // Always on screen while the shell shows the rail.
+                        break
                     }
                 }
             }
+    }
+}
+
+/// The app's rail panel (its tool palette) at the canvas's leading edge, while it offers one and
+/// has described it. Tool options open the palette's Tool panel as a popover from the rail
+/// (`options`, which the shell says is on screen), or send its fallback command. Only this view
+/// reads the rail's description, so a new one redraws it alone.
+struct CraftShellRail: View {
+    let bridge: CraftBridge
+    @Binding var options: String?
+
+    var body: some View {
+        if let info = bridge.panels.first(where: { $0.role == .rail }), let palette = Self.palette(bridge.open[info.id]) {
+            CraftRailView(palette: palette, panel: info.id, send: bridge.send, command: bridge.command, optionsPanel: $options) { id in
+                CraftPanelHost(bridge: bridge, id: id)
+            }
+            .transition(.move(edge: .leading).combined(with: .opacity))
+        }
+    }
+
+    /// The rail panel's first tool palette.
+    static func palette(_ panel: CraftPanel?) -> CraftToolPalette? {
+        panel?.nodes.lazy.compactMap { if case let .toolPalette(palette) = $0 { palette } else { nil } }.first
     }
 }
 

@@ -165,9 +165,83 @@ For example:
 {"action":"edit","panel":"layers","control":"layers","phase":"commit","gesture":10,"value":{"kind":"move","value":{"row":1,"target":2,"position":"above"}}}
 ```
 
+## `tool_palette`
+
+The app's tools, in a panel with the `rail` role: a vertical Liquid Glass rail at the canvas's leading edge. Tap a tool to select it; long-press a slot (a small corner mark says it has more) for its flyout of the other tools; double-tap the selected tool, or the rail's options button, for its options.
+
+**Fields:** `slots`, top to bottom, each with `tools`: the slot shows the selected tool when it holds it, else its first. A tool has an `id` (unique in the palette), a `label`, an `icon` (`symbol`, an SF Symbol name; `letter`, shown when the platform has no such symbol; the label's first letter when neither works) and a `shortcut` or `null`. `selected` is one of the tools. `options` names the app's Tool panel for the selected tool's options; without one, `fallback_options` is a command that shows them the app's own way; both `null`: no options.
+
+```json
+{
+  "type": "tool_palette",
+  "id": "palette",
+  "slots": [
+    {
+      "tools": [
+        {
+          "id": "move",
+          "label": "Move",
+          "icon": {
+            "symbol": "arrow.up.and.down.and.arrow.left.and.right",
+            "letter": "V"
+          },
+          "shortcut": "V"
+        }
+      ]
+    },
+    {
+      "tools": [
+        {
+          "id": "brush",
+          "label": "Brush",
+          "icon": {
+            "symbol": "paintbrush.pointed",
+            "letter": "B"
+          },
+          "shortcut": "B"
+        },
+        {
+          "id": "pencil",
+          "label": "Pencil",
+          "icon": {
+            "symbol": "pencil",
+            "letter": "N"
+          },
+          "shortcut": "N"
+        }
+      ]
+    },
+    {
+      "tools": [
+        {
+          "id": "smudge",
+          "label": "Smudge",
+          "icon": {
+            "symbol": null,
+            "letter": "S"
+          },
+          "shortcut": null
+        }
+      ]
+    }
+  ],
+  "selected": "brush",
+  "options": "brush",
+  "fallback_options": "window.toggle.optionsBar"
+}
+```
+
+**Sends:** one `choice` edit with the tool's `id`, `commit`, when a tool is tapped or picked from a flyout. Options open the `options` panel as a popover from the rail, or send `{"action":"command","id":…}` with `fallback_options`.
+
+For example:
+
+```json
+{"action":"edit","panel":"tools","control":"palette","phase":"commit","gesture":11,"value":{"kind":"choice","value":"pencil"}}
+```
+
 ## Wire
 
-The app sends the shell its panels (request kind 13) whenever they change: `panels`, every panel it offers, and `open`, the open ones described, by id. Each entry of `panels` has an `id`, a `title`, an `icon` (an SF Symbol name; Android maps it to a Material icon) and a `role`: `inspector` slides in beside the canvas, `tool` is a popover from its toolbar button.
+The app sends the shell its panels (request kind 13) whenever they change: `panels`, every panel it offers, and `open`, the open ones described, by id. Each entry of `panels` has an `id`, a `title`, an `icon` (an SF Symbol name; Android maps it to a Material icon) and a `role`: `inspector` slides in beside the canvas, `tool` is a popover from its toolbar button, `rail` is a vertical rail at the canvas's leading edge, always on screen (its `tool_palette`).
 
 ```json
 {

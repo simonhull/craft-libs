@@ -29,6 +29,9 @@ pub enum PanelRole {
     Inspector,
     /// A popover from its toolbar button (brush options).
     Tool,
+    /// A vertical rail at the canvas's leading edge, always on screen while the shell draws the
+    /// rail ([`super::Feature::Rail`]): the app's tools ([`super::ToolPalette`]).
+    Rail,
 }
 
 /// A panel the app offers: what the toolbar shows for it.
@@ -80,6 +83,7 @@ impl Panel {
                     Node::Toggle(t) => &t.id,
                     Node::Choice(c) => &c.id,
                     Node::ItemList(l) => &l.id,
+                    Node::ToolPalette(p) => &p.id,
                 };
                 if !seen.insert(id) {
                     return Err(UiError::DuplicateControl { panel: panel.clone(), control: id.clone() });
@@ -92,7 +96,7 @@ impl Panel {
                             return Err(UiError::DuplicateRow { list: id.clone(), row: dup.id });
                         }
                     }
-                    Node::Number(_) | Node::Toggle(_) | Node::Choice(_) => {}
+                    Node::Number(_) | Node::Toggle(_) | Node::Choice(_) | Node::ToolPalette(_) => {}
                 }
             }
             Ok(())
@@ -115,6 +119,8 @@ pub enum Node {
     Choice(Choice),
     /// Rows of items (layers, tracks, pages).
     ItemList(ItemList),
+    /// The app's tools, for a rail.
+    ToolPalette(super::ToolPalette),
 }
 
 /// A titled group of nodes.

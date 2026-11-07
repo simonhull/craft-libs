@@ -1,7 +1,7 @@
 # CraftUI Gallery
 
 An iPad app that shows every CraftUI primitive (`number`, `toggle`, `choice`, `section`,
-`item_list`) live, with no Rust and no Craft app behind it. Use it to see how a primitive looks and
+`item_list`, `tool_palette`) live, with no Rust and no Craft app behind it. Use it to see how a primitive looks and
 feels on iPadOS, and to check what it sends, before an app describes a panel with it.
 
 The Gallery reads the catalogue that craft-mobile generates, `crates/mobile/catalogue/ui.json`
@@ -17,6 +17,10 @@ inspector would hold them. For each one:
   respond, and a cancelled drag puts that control's value back.
 - **Edits Sent** lists every edit, newest first, as the JSON the app would receive through
   `craft_action`.
+
+**tool_palette** also shows the palette as the shell's rail, at the detail's leading edge: tap,
+long-press a slot for its flyout, double-tap or the options button for a stand-in Tool panel.
+`GalleryUITests` drives these too.
 
 **Chrome › menu_bar** puts the catalogue's menus in the iPad menu bar (`CraftMenuDelegate`) and
 the toolbar's menu button (`CraftMenuButton`), and logs what each sends. A view standing in for the

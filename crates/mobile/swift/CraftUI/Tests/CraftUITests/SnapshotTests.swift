@@ -37,6 +37,20 @@ import UIKit
         }
     }
 
+    /// The rail as the shell shows it, over a mid-grey canvas: Brush selected, its slot marked for
+    /// the flyout, Smudge as a letter, and the options button.
+    @available(iOS, deprecated: 26, message: "Renders in a scene-less window")
+    @Test func rail() throws {
+        for v in Self.variants.prefix(2) {
+            let view = CraftRailView(palette: .preview, panel: "tools", send: { _ in }, command: { _ in }, optionsPanel: .constant(nil)) { _ in EmptyView() }
+                .padding(12)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                .background(Color(white: 0.5))
+            let png = try Self.render(view, style: v.style, size: CGSize(width: 100, height: 320))
+            try Self.check(png, "rail-\(v.name)-\(Self.runtime)")
+        }
+    }
+
     /// The comparison must catch a one-value change: the Layers panel with Opacity at 50 % instead
     /// of 80 %, or with one row renamed (text alone, a few hundred pixels), is not its reference.
     @available(iOS, deprecated: 26, message: "Renders in a scene-less window")

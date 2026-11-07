@@ -128,6 +128,17 @@ final class GalleryStore {
         log.removeLast(max(0, log.count - 50))
     }
 
+    /// The first tool palette among the examples, for the Gallery's rail.
+    var palette: CraftToolPalette? {
+        entries.lazy.compactMap { if case let .toolPalette(p) = $0.example { p } else { nil } }.first
+    }
+
+    /// A stand-in for the app's Tool panel `id`, which the rail opens for a tool's options: the
+    /// catalogue's number, as a brush's size would be.
+    func optionsPanel(_ id: String) -> CraftPanel {
+        CraftPanel(id: id, title: id.capitalized, role: .tool, nodes: entries.filter { $0.name == "number" }.map(\.example))
+    }
+
     func clearLog() {
         log.removeAll()
     }
@@ -141,6 +152,7 @@ extension CraftNode {
         case let .number(id, _, value, _, _, _, _, _, _) where id == control: .number(value)
         case let .toggle(id, _, value, _) where id == control: .toggle(value)
         case let .choice(id, _, value, _, _) where id == control: .choice(value)
+        case let .toolPalette(palette) where palette.id == control: .choice(palette.selected)
         default: nil
         }
     }
@@ -159,6 +171,8 @@ extension CraftNode {
             return .toggle(id: id, label: label, value: new, enabled: enabled)
         case let (.choice(id, label, _, options, enabled), .choice(new)) where id == control && options.contains { $0.id == new }:
             return .choice(id: id, label: label, value: new, options: options, enabled: enabled)
+        case let (.toolPalette(palette), .choice(tool)) where palette.id == control && palette.slots.contains { $0.tools.contains { $0.id == tool } }:
+            return .toolPalette(palette.selecting(tool))
         case let (.itemList(id, rows, reorderable), _) where id == control:
             return .itemList(id: id, rows: rows.applying(value, reorderable: reorderable), reorderable: reorderable)
         default:

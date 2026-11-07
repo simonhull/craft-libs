@@ -59,6 +59,15 @@ struct CraftNodeView: View {
                 .disabled(!enabled)
         case let .itemList(id, rows, reorderable):
             CraftItemListView(id: id, rows: rows, reorderable: reorderable, panel: panel, send: send)
+        case let .toolPalette(palette):
+            // In a panel, a row of the same tools; the rail itself is the shell's (`rail` role).
+            ScrollView(.horizontal) {
+                CraftRailView(palette: palette.withoutOptions, panel: panel, axis: .horizontal, send: send, command: { _ in }, optionsPanel: .constant(nil)) { _ in
+                    EmptyView()
+                }
+                .padding(.vertical, 4)
+            }
+            .scrollBounceBehavior(.basedOnSize)
         case let .unknown(type):
             Label("Needs a newer CraftKit: \(type)", systemImage: "questionmark.square.dashed")
                 .foregroundStyle(.secondary)

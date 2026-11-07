@@ -2,8 +2,9 @@ import Foundation
 
 /// A panel the app offers (craft-mobile's `ui::PanelInfo`).
 public struct CraftPanelInfo: Decodable, Equatable, Identifiable, Sendable {
-    /// Where a panel shows: `inspector` slides in beside the canvas, `tool` is a popover.
-    public enum Role: String, Decodable, Sendable { case inspector, tool }
+    /// Where a panel shows: `inspector` slides in beside the canvas, `tool` is a popover, `rail` is
+    /// the vertical rail at the canvas's leading edge (its tool palette).
+    public enum Role: String, Decodable, Sendable { case inspector, tool, rail }
 
     public let id: String
     public let title: String
@@ -102,6 +103,7 @@ public indirect enum CraftNode: Decodable, Equatable, Sendable {
     case toggle(id: String, label: String, value: Bool, enabled: Bool)
     case choice(id: String, label: String, value: String, options: [CraftChoiceOption], enabled: Bool)
     case itemList(id: String, rows: [CraftRow], reorderable: Bool)
+    case toolPalette(CraftToolPalette)
     /// A type this kit doesn't know (the app is newer).
     case unknown(type: String)
     /// A known type that didn't decode (the app sent it wrong).
@@ -158,13 +160,15 @@ public indirect enum CraftNode: Decodable, Equatable, Sendable {
             self = try .itemList(
                 id: c.decode(String.self, forKey: .id), rows: c.decode([CraftRow].self, forKey: .rows),
                 reorderable: c.decode(Bool.self, forKey: .reorderable))
+        case "tool_palette":
+            self = try .toolPalette(CraftToolPalette(from: decoder))
         default:
             self = .unknown(type: type)
         }
     }
 
     /// The `type`s this kit draws.
-    static let knownTypes: Set = ["section", "number", "toggle", "choice", "item_list"]
+    static let knownTypes: Set = ["section", "number", "toggle", "choice", "item_list", "tool_palette"]
 
     /// A list of nodes, each decoded on its own: one that fails becomes `.malformed` (a known type)
     /// or `.unknown` (with its `type`, empty if it has none) instead of failing the list.
@@ -194,6 +198,8 @@ public indirect enum CraftNode: Decodable, Equatable, Sendable {
         case let .section(id, _, _, _), let .number(id, _, _, _, _, _, _, _, _), let .toggle(id, _, _, _),
              let .choice(id, _, _, _, _), let .itemList(id, _, _):
             id
+        case let .toolPalette(palette):
+            palette.id
         case let .unknown(type):
             "unknown-\(type)"
         case let .malformed(type):

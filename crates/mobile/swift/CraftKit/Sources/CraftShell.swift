@@ -27,6 +27,8 @@ public struct CraftShell: View {
     @State private var inspectorShown = false
     /// The tool panel whose popover is up.
     @State private var popover: String?
+    /// The Tool panel the rail opened for the selected tool's options.
+    @State private var railOptions: String?
     @State private var photos: [PhotosPickerItem] = []
 
     /// - Parameters:
@@ -77,6 +79,11 @@ public struct CraftShell: View {
         var shown: Set<String> = []
         if inspectorShown, let id = inspector.panelID { shown.insert(id) }
         if let popover { shown.insert(popover) }
+        if rail {
+            // The rail is always on screen; so is the options panel it opened.
+            shown.formUnion(bridge.panels.filter { $0.role == .rail }.map(\.id))
+            if let railOptions { shown.insert(railOptions) }
+        }
         return shown
     }
 
@@ -89,6 +96,9 @@ public struct CraftShell: View {
             .overlay(alignment: .bottom) {
                 // While typing, the keyboard is the toolbar.
                 if chrome || nativePanels || menus, !bridge.keyboardVisible { toolbar.padding(.bottom, 20).transition(.opacity) }
+            }
+            .overlay(alignment: .leading) {
+                if rail { CraftShellRail(bridge: bridge, options: $railOptions).padding(.leading, 12) }
             }
             .animation(.easeOut(duration: 0.2), value: bridge.keyboardVisible)
             .inspector(isPresented: Binding(get: { inspectorShown && isAvailable(inspector) }, set: { inspectorShown = $0 })) {
