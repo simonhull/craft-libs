@@ -1,0 +1,32 @@
+# The CraftUI Gallery: every ui primitive from the generated catalogue, live, with no Rust.
+#   xcodegen && open Gallery.xcodeproj   (or see README.md for the command line)
+name: Gallery
+options:
+  bundleIdPrefix: dev.craft
+  deploymentTarget:
+    iOS: "26.0"
+packages:
+  CraftUI:
+    path: ../CraftUI
+targets:
+  Gallery:
+    type: application
+    platform: iOS
+    sources:
+      - GalleryApp.swift
+      - GalleryStore.swift
+      # The catalogue craft-mobile generates (UPDATE_CATALOGUE=1 cargo test -p craft-mobile).
+      - path: ../../catalogue/ui.json
+        buildPhase: resources
+    dependencies:
+      - package: CraftUI
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.craft.Gallery
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_CFBundleDisplayName: CraftUI Gallery
+        TARGETED_DEVICE_FAMILY: "2"
+        SWIFT_VERSION: "6.0"
+        SWIFT_STRICT_CONCURRENCY: complete
+        CODE_SIGN_STYLE: Automatic
