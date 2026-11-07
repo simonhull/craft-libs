@@ -1,0 +1,112 @@
+{
+  "version": 1,
+  "primitives": [
+    {
+      "name": "number",
+      "about": "A value in a range: a slider, with the value shown beside it; tap the value to type one.",
+      "fields": "`value` within `min`..=`max`; `step` snaps it (`null`: continuous); `unit` is `none`, `percent` (a 0..=1 value shown as 0–100 %), `pixels` or `degrees`; `enabled: false` greys it out.",
+      "sends": "`number` edits: `begin`, `change` while dragging, then `commit` (or `cancel`); a typed value is one `commit`.",
+      "example": {
+        "type": "number",
+        "id": "opacity",
+        "label": "Opacity",
+        "value": 0.8,
+        "min": 0.0,
+        "max": 1.0,
+        "step": null,
+        "unit": "percent",
+        "enabled": true
+      }
+    },
+    {
+      "name": "toggle",
+      "about": "On or off: a switch.",
+      "fields": "`value`; `enabled: false` greys it out.",
+      "sends": "one `toggle` edit, `commit`.",
+      "example": {
+        "type": "toggle",
+        "id": "visible",
+        "label": "Visible",
+        "value": true,
+        "enabled": true
+      }
+    },
+    {
+      "name": "choice",
+      "about": "One of several options: segmented for up to 4, a menu for more.",
+      "fields": "`value` is the chosen option's `id`; option ids are unique; `enabled: false` greys it out.",
+      "sends": "one `choice` edit with the option's `id`, `commit`.",
+      "example": {
+        "type": "choice",
+        "id": "blend",
+        "label": "Blend Mode",
+        "value": "normal",
+        "options": [
+          {
+            "id": "normal",
+            "label": "Normal"
+          },
+          {
+            "id": "multiply",
+            "label": "Multiply"
+          },
+          {
+            "id": "screen",
+            "label": "Screen"
+          }
+        ],
+        "enabled": true
+      }
+    },
+    {
+      "name": "section",
+      "about": "A titled group of other nodes; the user can collapse it.",
+      "fields": "`children` are any nodes; `collapsed` is how it starts.",
+      "sends": "nothing itself; its children send their own edits.",
+      "example": {
+        "type": "section",
+        "id": "layer",
+        "title": "Layer",
+        "collapsed": false,
+        "children": [
+          {
+            "type": "toggle",
+            "id": "locked",
+            "label": "Lock",
+            "value": false,
+            "enabled": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "item_list",
+      "about": "Rows of items such as layers, top to bottom: tap to select, swipe to hide, long-press to rename, drag to reorder.",
+      "fields": "each row's `id` is the app's own and unique in the list; `depth` indents it (inside groups); `visible: null` means it can't be hidden; `reorderable` allows dragging.",
+      "sends": "`select`, `set_visible`, `rename` and (when reorderable) `move` edits, each one `commit`, naming rows by their `id`.",
+      "example": {
+        "type": "item_list",
+        "id": "layers",
+        "rows": [
+          {
+            "id": 2,
+            "title": "Sky",
+            "subtitle": "Pixel",
+            "depth": 0,
+            "visible": true,
+            "selected": true
+          },
+          {
+            "id": 1,
+            "title": "Background",
+            "subtitle": "Pixel",
+            "depth": 0,
+            "visible": true,
+            "selected": false
+          }
+        ],
+        "reorderable": true
+      }
+    }
+  ]
+}
