@@ -20,7 +20,7 @@ public struct CraftShell: View {
 
     @State private var bridge = CraftBridge.shared
     /// What the inspector shows; kept when it closes, so it slides away with its contents.
-    @State private var inspector = Inspector.items
+    @State private var inspector = CraftInspector.items
     @State private var inspectorShown = false
     /// The tool panel whose popover is up.
     @State private var popover: String?
@@ -48,18 +48,10 @@ public struct CraftShell: View {
 
     private var opensImages: Bool { documentTypes.contains { $0.conforms(to: .image) } }
 
-    /// What the inspector column holds.
-    private enum Inspector: Hashable {
-        /// The items panel (`chrome`).
-        case items
-        /// One of the app's inspector panels, by id.
-        case panel(String)
-    }
-
     /// The app's panels on screen, which it describes.
     private var shownPanels: Set<String> {
         var shown: Set<String> = []
-        if inspectorShown, case let .panel(id) = inspector { shown.insert(id) }
+        if inspectorShown, let id = inspector.panelID { shown.insert(id) }
         if let popover { shown.insert(popover) }
         return shown
     }
@@ -81,11 +73,10 @@ public struct CraftShell: View {
             .onChange(of: shownPanels, initial: true) { _, shown in
                 if nativePanels { bridge.showing(shown) }
             }
-            .onChange(of: bridge.panels.panels) { _, offered in
-                // A panel the app no longer offers closes; one it still offers stays open.
-                let ids = Set(offered.map(\.id))
-                if case let .panel(id) = inspector, !ids.contains(id) { inspectorShown = false }
-                if let popover, !ids.contains(popover) { self.popover = nil }
+            .background {
+                if nativePanels {
+                    CraftPanelCloser(bridge: bridge, inspector: $inspector, inspectorShown: $inspectorShown, popover: $popover)
+                }
             }
             .fileImporter(
                 // Closing only hides the picker: SwiftUI closes it before it delivers the chosen
@@ -173,7 +164,7 @@ public struct CraftShell: View {
     }
 
     /// Whether the inspector may show this: each kind only when the shell was asked for it.
-    private func isAvailable(_ inspector: Inspector) -> Bool {
+    private func isAvailable(_ inspector: CraftInspector) -> Bool {
         switch inspector {
         case .items: chrome
         case .panel: nativePanels
@@ -187,25 +178,17 @@ public struct CraftShell: View {
                 .inspectorColumnWidth(min: 240, ideal: 300, max: 400)
         case let .panel(id):
             NavigationStack {
-                panel(id)
+                CraftPanelHost(bridge: bridge, id: id)
             }
+            // Another panel is another view: none of this one's state (a drag, a collapsed
+            // section, the scroll position) carries over.
+            .id(id)
             .inspectorColumnWidth(min: 280, ideal: 320, max: 400)
         }
     }
 
-    /// One of the app's panels as described, or a spinner until the app describes it.
-    @ViewBuilder private func panel(_ id: String) -> some View {
-        if let panel = bridge.panels.open[id] {
-            CraftPanelView(panel: panel, send: bridge.send)
-        } else {
-            ProgressView()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .navigationTitle(bridge.panels.panels.first { $0.id == id }?.title ?? "")
-        }
-    }
-
     /// Open or close an inspector; another one in the column gives way.
-    private func toggleInspector(_ which: Inspector) {
+    private func toggleInspector(_ which: CraftInspector) {
         withAnimation {
             if inspectorShown, inspector == which {
                 inspectorShown = false
@@ -216,7 +199,7 @@ public struct CraftShell: View {
         }
     }
 
-    private func isShowing(_ which: Inspector) -> Bool {
+    private func isShowing(_ which: CraftInspector) -> Bool {
         inspectorShown && inspector == which
     }
 
@@ -224,32 +207,11 @@ public struct CraftShell: View {
         GlassEffectContainer(spacing: 12) {
             HStack(spacing: 12) {
                 if chrome { chromeTools }
-                if nativePanels, !bridge.panels.panels.isEmpty { panelTools }
+                if nativePanels {
+                    CraftPanelTools(bridge: bridge, openInspector: inspectorShown ? inspector : nil, popover: $popover, toggleInspector: toggleInspector)
+                }
             }
         }
-    }
-
-    /// The app's panels, one button each, like the items button: an inspector toggles the column, a
-    /// tool opens its popover. The open one is tinted.
-    private var panelTools: some View {
-        ForEach(bridge.panels.panels) { info in
-            switch info.role {
-            case .inspector:
-                panelTool(info, open: isShowing(.panel(info.id))) { toggleInspector(.panel(info.id)) }
-            case .tool:
-                panelTool(info, open: popover == info.id) { popover = popover == info.id ? nil : info.id }
-                    .popover(isPresented: Binding(get: { popover == info.id }, set: { if !$0, popover == info.id { popover = nil } })) {
-                        CraftPopoverPanel { panel(info.id) }
-                    }
-            }
-        }
-    }
-
-    private func panelTool(_ info: CraftPanelInfo, open: Bool, action: @escaping () -> Void) -> some View {
-        tool(info.title, info.icon, action: action)
-            .padding(6)
-            .glassEffect(open ? .regular.tint(.accentColor).interactive() : .regular.interactive(), in: .circle)
-            .accessibilityAddTraits(open ? .isSelected : [])
     }
 
     /// Files, history and the items inspector (`chrome`).
@@ -293,34 +255,7 @@ public struct CraftShell: View {
     }
 
     private func tool(_ label: String, _ symbol: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.title3)
-                .frame(width: 44, height: 44)
-                .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(label)
-    }
-}
-
-/// A tool panel in a popover: as tall as its contents, up to what fits, and a popover even where
-/// the window is compact (Slide Over, a narrow split), as a tool's options should be.
-struct CraftPopoverPanel<Content: View>: View {
-    @ViewBuilder let content: Content
-    @State private var height: CGFloat = 360
-
-    var body: some View {
-        NavigationStack {
-            content
-                .navigationBarTitleDisplayMode(.inline)
-                .scrollBounceBehavior(.basedOnSize)
-                .onScrollGeometryChange(for: CGFloat.self) { $0.contentSize.height + $0.contentInsets.top + $0.contentInsets.bottom } action: { _, new in
-                    height = new
-                }
-        }
-        .frame(idealWidth: 340, idealHeight: min(max(height, 120), 640))
-        .presentationCompactAdaptation(.popover)
+        CraftToolButton(label: label, symbol: symbol, action: action)
     }
 }
 

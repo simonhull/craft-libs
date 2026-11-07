@@ -90,6 +90,9 @@ public final class CraftBridge {
     public private(set) var snapshot = CraftSnapshot()
     /// The app's native panels: every one it offers, and the open ones described (wire kind 13).
     public private(set) var panels = CraftPanels()
+    /// Whether the app has described its panels since the shell last said which are on screen:
+    /// until then a shown panel without a description is still coming; after, it isn't.
+    private(set) var describedSinceShowing = false
     /// The panels the shell shows, sorted: said again when the canvas starts, so the app describes
     /// them even if the shell said it before the app was running.
     private var shownPanels: [String] = []
@@ -163,8 +166,9 @@ public final class CraftBridge {
     }
 
     /// The panels on screen now, by id; only they are described. Call whenever the set changes.
-    public func showing(_ ids: Set<String>) {
+    func showing(_ ids: Set<String>) {
         shownPanels = ids.sorted()
+        describedSinceShowing = false
         sayShowing()
     }
 
@@ -416,8 +420,12 @@ public final class CraftBridge {
         case 12:
             showsPhotos = true
         case 13:
-            if let decoded = try? JSONDecoder().decode(CraftPanels.self, from: Data(text.utf8)), decoded != panels {
-                panels = decoded
+            do {
+                let decoded = try JSONDecoder().decode(CraftPanels.self, from: Data(text.utf8))
+                if decoded != panels { panels = decoded }
+                if !describedSinceShowing { describedSinceShowing = true }
+            } catch {
+                craftLog.error("native panels didn't decode, kept the last ones: \(error, privacy: .public)")
             }
         default:
             break
