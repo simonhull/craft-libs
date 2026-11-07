@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Rows of items such as layers: tap to select, swipe or tap the eye to hide, long-press to rename or
-/// for the row's own actions (a destructive one is a swipe too), drag to reorder (when `reorderable`). Select (in the header) picks several rows, a tap adding or
+/// Rows of items such as layers: tap to select, swipe or tap the eye to hide, long-press to rename
+/// (unless the row says it can't be) or for the row's own actions (a destructive one is a swipe too), drag to reorder (when `reorderable`). Select (in the header) picks several rows, a tap adding or
 /// removing each, until Done; with a hardware keyboard, Command-tap does the same and Shift-tap
 /// selects a range. Selected rows are tinted.
 struct CraftItemListView: View {
@@ -77,9 +77,11 @@ struct CraftItemListView: View {
             }
         }
         .contextMenu {
-            Button("Rename…", systemImage: "pencil") { startRenaming(row) }
+            if row.rename == .allowed {
+                Button("Rename…", systemImage: "pencil") { startRenaming(row) }
+            }
             if !row.actions.isEmpty {
-                Divider()
+                if row.rename == .allowed { Divider() }
                 ForEach(row.actions) { action in
                     actionButton(action, row: row)
                 }
@@ -224,7 +226,9 @@ private struct RowAccessibility: ViewModifier {
                 if let visible = row.visible {
                     Button(visible ? "Hide" : "Show") { setVisible(!visible) }
                 }
-                Button("Rename", action: rename)
+                if row.rename == .allowed {
+                    Button("Rename", action: rename)
+                }
                 ForEach(row.actions) { action in
                     Button(action.label) { act(action) }
                 }

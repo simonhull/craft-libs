@@ -93,8 +93,8 @@ pub use command::{CommandId, Shortcut, named_keys};
 pub use edit::{Edit, EditError, EditValue, GestureId, Message, Phase, Position, SelectMode};
 pub use menu::{Menu, MenuBar, MenuCommand, MenuEntry, MenuRole, Submenu};
 pub use node::{
-    ActionId, Choice, ChoiceOption, ControlId, ItemList, Node, Number, Panel, PanelId, PanelInfo, PanelRole, Row, RowAction, RowId, Scale, Section,
-    Toggle, Unit,
+    ActionId, Choice, ChoiceOption, ControlId, ItemList, Node, Number, Panel, PanelId, PanelInfo, PanelRole, Rename, Row, RowAction, RowId, Scale,
+    Section, Toggle, Unit,
 };
 pub(crate) use publish::PanelsState;
 use publish::Published;

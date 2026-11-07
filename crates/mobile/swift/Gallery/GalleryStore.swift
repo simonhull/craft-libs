@@ -221,7 +221,7 @@ extension CraftRow {
     func with(title: String? = nil, visible: Bool? = nil, selected: Bool? = nil) -> CraftRow {
         CraftRow(
             id: id, title: title ?? self.title, subtitle: subtitle, depth: depth,
-            visible: visible ?? self.visible, selected: selected ?? self.selected, actions: actions)
+            visible: visible ?? self.visible, selected: selected ?? self.selected, actions: actions, rename: rename)
     }
 }
 

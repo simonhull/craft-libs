@@ -437,6 +437,24 @@ impl RowAction {
     }
 }
 
+/// Whether the user can rename a row (its context menu's Rename…, [`super::EditValue::Rename`]).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Rename {
+    /// Rename… is offered (the default).
+    #[default]
+    Allowed,
+    /// The row has no name of its own to change (an open document): no Rename….
+    No,
+}
+
+impl Rename {
+    #[expect(clippy::trivially_copy_pass_by_ref, reason = "serde's `skip_serializing_if` passes a reference")]
+    fn is_allowed(&self) -> bool {
+        *self == Self::Allowed
+    }
+}
+
 /// One row of an [`ItemList`].
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Row {
@@ -449,13 +467,25 @@ pub struct Row {
     /// Left out of the JSON when there are none; missing means none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     actions: Vec<RowAction>,
+    /// Left out of the JSON when allowed; missing means allowed.
+    #[serde(default, skip_serializing_if = "Rename::is_allowed")]
+    rename: Rename,
 }
 
 impl Row {
     /// A top-level, unselected row that can't be hidden. `id` is the app's own (a layer id).
     #[must_use]
     pub fn new(id: impl Into<RowId>, title: impl Into<String>) -> Self {
-        Self { id: id.into(), title: title.into(), subtitle: String::new(), depth: 0, visible: None, selected: false, actions: Vec::new() }
+        Self {
+            id: id.into(),
+            title: title.into(),
+            subtitle: String::new(),
+            depth: 0,
+            visible: None,
+            selected: false,
+            actions: Vec::new(),
+            rename: Rename::Allowed,
+        }
     }
 
     /// A second line ("Pixel", "Group").
@@ -483,6 +513,13 @@ impl Row {
     #[must_use]
     pub fn selected(mut self, selected: bool) -> Self {
         self.selected = selected;
+        self
+    }
+
+    /// Whether the user can rename it ([`Rename::Allowed`] unless set).
+    #[must_use]
+    pub fn rename(mut self, rename: Rename) -> Self {
+        self.rename = rename;
         self
     }
 
@@ -645,6 +682,21 @@ mod tests {
         .unwrap();
         assert_eq!(partial, Row::new(3, "a").actions(vec![RowAction::new("close", "Close")]), "icon and destructive are optional");
         assert_eq!(RowAction::new("close", "Close").id().as_str(), "close");
+    }
+
+    /// A row is renamable unless it says otherwise; the JSON says so only for one that isn't, and a
+    /// row from an older app (no `rename`) is renamable.
+    #[test]
+    fn a_row_can_refuse_renaming() {
+        assert_eq!(Rename::default(), Rename::Allowed);
+        let fixed = Row::new(3, "a.psd").rename(Rename::No);
+        assert_eq!(serde_json::to_value(&fixed).unwrap()["rename"], json!("no"));
+        assert!(serde_json::to_value(Row::new(3, "a")).unwrap().get("rename").is_none(), "allowed, left out");
+        let old: Row =
+            serde_json::from_value(json!({"id": 3, "title": "a", "subtitle": "", "depth": 0, "visible": null, "selected": false})).unwrap();
+        assert_eq!(old, Row::new(3, "a").rename(Rename::Allowed));
+        let back: Row = serde_json::from_value(serde_json::to_value(&fixed).unwrap()).unwrap();
+        assert_eq!(back, fixed);
     }
 
     #[test]

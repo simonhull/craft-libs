@@ -167,4 +167,16 @@ enum JSONValue: Decodable, Equatable {
         let row = try JSONDecoder().decode(CraftRow.self, from: Data(json.utf8))
         #expect(row.actions == [CraftRowAction(id: "close", label: "Close"), CraftRowAction(id: "rm", label: "Remove", icon: "trash", destructive: true)])
     }
+
+    /// A row says when it can't be renamed; left out, or a value this kit doesn't know, it can.
+    @Test func aRowCanRefuseRenaming() throws {
+        func row(_ extra: String) throws -> CraftRow {
+            try JSONDecoder().decode(CraftRow.self, from: Data(#"{"id":1,"title":"a","subtitle":"","depth":0,"visible":null,"selected":false\#(extra)}"#.utf8))
+        }
+        #expect(try row("").rename == .allowed)
+        #expect(try row(#","rename":"no""#).rename == .no)
+        #expect(try row(#","rename":"allowed""#).rename == .allowed)
+        #expect(try row(#","rename":"ask_first""#).rename == .allowed)
+        #expect(CraftRow(id: 1, title: "a").rename == .allowed)
+    }
 }

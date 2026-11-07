@@ -106,16 +106,28 @@ public struct CraftRow: Decodable, Equatable, Identifiable, Sendable {
     /// What the user can do to the row, in menu order; none when the app leaves them out. One that
     /// doesn't decode is skipped.
     public let actions: [CraftRowAction]
+    /// Whether Rename… is offered.
+    public let rename: Rename
+
+    /// Whether the user can rename a row (`ui::Rename`). Left out, or a value this kit doesn't
+    /// know, it can.
+    public enum Rename: String, Decodable, Sendable {
+        case allowed, no
+
+        public init(from decoder: any Decoder) throws {
+            self = try Rename(rawValue: decoder.singleValueContainer().decode(String.self)) ?? .allowed
+        }
+    }
 
     public init(
         id: UInt64, title: String, subtitle: String = "", depth: UInt32 = 0, visible: Bool? = nil, selected: Bool = false,
-        actions: [CraftRowAction] = []
+        actions: [CraftRowAction] = [], rename: Rename = .allowed
     ) {
-        (self.id, self.title, self.subtitle, self.depth, self.visible, self.selected, self.actions) =
-            (id, title, subtitle, depth, visible, selected, actions)
+        (self.id, self.title, self.subtitle, self.depth, self.visible, self.selected, self.actions, self.rename) =
+            (id, title, subtitle, depth, visible, selected, actions, rename)
     }
 
-    private enum Key: String, CodingKey { case id, title, subtitle, depth, visible, selected, actions }
+    private enum Key: String, CodingKey { case id, title, subtitle, depth, visible, selected, actions, rename }
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: Key.self)
@@ -123,7 +135,8 @@ public struct CraftRow: Decodable, Equatable, Identifiable, Sendable {
             id: c.decode(UInt64.self, forKey: .id), title: c.decode(String.self, forKey: .title),
             subtitle: c.decode(String.self, forKey: .subtitle), depth: c.decode(UInt32.self, forKey: .depth),
             visible: c.decodeIfPresent(Bool.self, forKey: .visible), selected: c.decode(Bool.self, forKey: .selected),
-            actions: (c.decodeIfPresent([Skippable<CraftRowAction>].self, forKey: .actions) ?? []).compactMap(\.value))
+            actions: (c.decodeIfPresent([Skippable<CraftRowAction>].self, forKey: .actions) ?? []).compactMap(\.value),
+            rename: c.decodeIfPresent(Rename.self, forKey: .rename) ?? .allowed)
     }
 }
 
