@@ -39,6 +39,16 @@ import Testing
         #expect(CraftStatusView.shown(nil, dismissed: nil) == nil)
     }
 
+    /// Two saves say "Saved" twice: a new id is a new message, which shows even after the first was
+    /// dismissed; older apps send no id.
+    @Test func aNewIdShowsTheSameTextAgain() throws {
+        let first = CraftStatus.Message(text: "Saved", id: 1)
+        let second = CraftStatus.Message(text: "Saved", id: 2)
+        #expect(CraftStatusView.shown(second, dismissed: first) == second)
+        let old = try JSONDecoder().decode(CraftStatus.Message.self, from: Data(#"{"text":"Saved","tone":"info"}"#.utf8))
+        #expect(old == CraftStatus.Message(text: "Saved"))
+    }
+
     @Test func anErrorStaysLonger() {
         #expect(CraftStatusView.duration(.error) > CraftStatusView.duration(.info))
     }

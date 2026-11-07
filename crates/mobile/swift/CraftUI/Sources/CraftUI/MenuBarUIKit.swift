@@ -13,8 +13,9 @@ import UIKit
 /// A shortcut runs once either way: the first responder gets a key press before any key command,
 /// and the canvas takes every press with ⌘ or ⌃ for the app's own key handling, so the menu's key
 /// command never fires for it. Chosen from the menu, the item sends the same shortcut.
-/// - Every item's `propertyList` is its command id and its action `action`; enabled and checked
-///   are left to `validate(_:)` (``CraftMenuDelegate``), so state changes need no rebuild.
+/// - Every item's `propertyList` is its command id and its action `action`; its label, enabled and
+///   checked are set again by `validate(_:)` (``CraftMenuResponder``), so changing them needs no
+///   rebuild.
 public enum CraftMenuBuilder {
     /// The menus, left to right. `action` is the selector the items send.
     @MainActor
@@ -51,14 +52,23 @@ public enum CraftMenuBuilder {
     @MainActor
     static func element(_ command: CraftMenuCommand, action: Selector) -> UIMenuElement {
         let id = command.id
-        guard let shortcut = command.shortcut else {
-            return UICommand(title: command.label, action: action, propertyList: id)
+        guard let shortcut = command.shortcut, isKeyCommand(shortcut), let input = input(shortcut.key) else {
+            return UICommand(title: title(command), action: action, propertyList: id)
         }
-        guard shortcut.cmd || shortcut.ctrl, let input = input(shortcut.key) else {
-            // Shown, not pressed: the label says the keys.
-            return UICommand(title: "\(command.label)\t\(shortcut.text)", action: action, propertyList: id)
-        }
-        return UIKeyCommand(title: command.label, action: action, input: input, modifierFlags: flags(shortcut), propertyList: id)
+        return UIKeyCommand(title: title(command), action: action, input: input, modifierFlags: flags(shortcut), propertyList: id)
+    }
+
+    /// Whether the item's shortcut is a key command: only with ⌘ or ⌃ (and a key UIKit can press).
+    static func isKeyCommand(_ shortcut: CraftShortcut) -> Bool {
+        shortcut.hasCommandModifier && input(shortcut.key) != nil
+    }
+
+    /// The item's title: its label, and the keys after it when they aren't a key command (UIKit
+    /// shows a key command's keys itself). Set again as its menu opens (`validate(_:)`), so a new
+    /// label needs no rebuild.
+    static func title(_ command: CraftMenuCommand) -> String {
+        guard let shortcut = command.shortcut, !isKeyCommand(shortcut) else { return command.label }
+        return "\(command.label)\t\(shortcut.glyphs)"
     }
 
     /// UIKit's input string for a key, or `nil` for one it can't press.
@@ -119,26 +129,50 @@ open class CraftMenuDelegate: UIResponder, UIApplicationDelegate {
     open override func buildMenu(with builder: any UIMenuBuilder) {
         super.buildMenu(with: builder)
         guard builder.system == .main else { return }
-        let menus = MainActor.assumeIsolated { CraftMenuBuilder.menus(CraftMenus.shared.bar, action: CraftMenuResponder.action) }
-        Self.install(menus, in: builder)
+        let (menus, roles) = MainActor.assumeIsolated {
+            let bar = CraftMenus.shared.bar
+            return (CraftMenuBuilder.menus(bar, action: CraftMenuResponder.action), bar.menus.map(\.role))
+        }
+        Self.install(menus, roles: roles, in: builder)
     }
 
-    /// Put the app's menus in the bar: one titled as a system menu (File, Edit, View, Help) takes
-    /// its place; Window keeps the system's window items after the app's; the rest go before
-    /// Window. The system's Format menu is for text views, which the app doesn't have.
-    static func install(_ menus: [UIMenu], in builder: any UIMenuBuilder) {
+    /// Put the app's menus in the bar by their role, never by title (titles are translated): a
+    /// File, Edit, View or Help menu takes the system menu's place; a Window menu's items go before
+    /// the system's window items; a menu of the app's own goes before Window. The system's Format
+    /// menu is for text views, which the app doesn't have.
+    static func install(_ menus: [UIMenu], roles: [CraftMenu.Role?], in builder: any UIMenuBuilder) {
         builder.remove(menu: .format)
-        let replaceable: [UIMenu.Identifier] = [.file, .edit, .view, .help]
-        for menu in menus {
-            if let system = replaceable.first(where: { builder.menu(for: $0)?.title == menu.title }) {
+        for (menu, role) in zip(menus, roles) {
+            switch Self.placement(role) {
+            case let .replace(system) where builder.menu(for: system) != nil:
                 builder.replace(menu: system, with: menu)
-            } else if builder.menu(for: .window)?.title == menu.title {
+            case .startOfWindow where builder.menu(for: .window) != nil:
                 builder.insertChild(UIMenu(title: "", options: .displayInline, children: menu.children), atStartOfMenu: .window)
-            } else if builder.menu(for: .window) != nil {
-                builder.insertSibling(menu, beforeMenu: .window)
-            } else {
-                builder.insertSibling(menu, afterMenu: .application)
+            default:
+                if builder.menu(for: .window) != nil {
+                    builder.insertSibling(menu, beforeMenu: .window)
+                } else {
+                    builder.insertSibling(menu, afterMenu: .application)
+                }
             }
+        }
+    }
+
+    /// Where a menu of `role` goes in the bar.
+    enum Placement: Equatable {
+        case replace(UIMenu.Identifier)
+        case startOfWindow
+        case beforeWindow
+    }
+
+    static func placement(_ role: CraftMenu.Role?) -> Placement {
+        switch role {
+        case .file: .replace(.file)
+        case .edit: .replace(.edit)
+        case .view: .replace(.view)
+        case .help: .replace(.help)
+        case .window: .startOfWindow
+        case nil: .beforeWindow
         }
     }
 }
@@ -184,9 +218,37 @@ public final class CraftMenuResponder: UIResponder {
     public override func validate(_ command: UICommand) {
         super.validate(command)
         guard command.action == Self.action, let id = command.propertyList as? String else { return }
-        let item = MainActor.assumeIsolated { CraftMenus.shared.commands[id] }
-        command.attributes = item?.enabled == true ? [] : .disabled
-        command.state = item?.checked == true ? .on : .off
+        guard let item = MainActor.assumeIsolated({ CraftMenus.shared.commands[id] }) else {
+            command.attributes = .disabled
+            return
+        }
+        command.title = CraftMenuBuilder.title(item)
+        command.attributes = item.enabled ? [] : .disabled
+        command.state = item.checked == true ? .on : .off
+    }
+}
+
+/// Which responder is first, if any: UIKit only says by sending an action to it.
+@MainActor
+public enum CraftFirstResponder {
+    private static weak var found: UIResponder?
+
+    /// The first responder, or `nil` when there is none.
+    public static func current() -> UIResponder? {
+        found = nil
+        UIApplication.shared.sendAction(#selector(UIResponder.craftReportFirstResponder), to: nil, from: nil, for: nil)
+        return found
+    }
+
+    fileprivate static func report(_ responder: UIResponder) {
+        found = responder
+    }
+}
+
+extension UIResponder {
+    /// Sent to the first responder by ``CraftFirstResponder/current()``.
+    @objc fileprivate func craftReportFirstResponder() {
+        MainActor.assumeIsolated { CraftFirstResponder.report(self) }
     }
 }
 #endif

@@ -32,7 +32,18 @@ impl Status {
     }
 
     fn with_message(mut self, text: String, tone: Tone) -> Self {
-        self.message = (!text.trim().is_empty()).then_some(StatusMessage { text, tone });
+        self.message = (!text.trim().is_empty()).then_some(StatusMessage { text, tone, id: 0 });
+        self
+    }
+
+    /// Number the message, so the same text said again shows again: give each new message a new
+    /// id (a counter of the app's), and keep it while the message stands. Without one (0), a
+    /// message shows when its text or tone changes.
+    #[must_use]
+    pub fn message_id(mut self, id: u64) -> Self {
+        if let Some(message) = &mut self.message {
+            message.id = id;
+        }
         self
     }
 
@@ -55,6 +66,10 @@ impl Status {
 pub struct StatusMessage {
     text: String,
     tone: Tone,
+    /// Tells the same text said again apart from it still being said: the shell shows a message
+    /// again when its text, tone or id changes. 0 when left out.
+    #[serde(default)]
+    id: u64,
 }
 
 impl StatusMessage {
@@ -62,6 +77,12 @@ impl StatusMessage {
     #[must_use]
     pub fn text(&self) -> &str {
         &self.text
+    }
+
+    /// Its id ([`Status::message_id`]).
+    #[must_use]
+    pub fn id(&self) -> u64 {
+        self.id
     }
 
     /// Whether it reports a failure.
@@ -122,7 +143,7 @@ mod tests {
         let status = Status::new().error("Couldn't open b.psd").progress(Progress::new("Exporting a.png").fraction(0.25).cancel("job.cancel"));
         assert_eq!(
             serde_json::to_value(&status).unwrap(),
-            json!({"message": {"text": "Couldn't open b.psd", "tone": "error"}, "progress": {"label": "Exporting a.png", "fraction": 0.25, "cancel": "job.cancel"}})
+            json!({"message": {"text": "Couldn't open b.psd", "tone": "error", "id": 0}, "progress": {"label": "Exporting a.png", "fraction": 0.25, "cancel": "job.cancel"}})
         );
         assert_eq!(serde_json::to_value(Status::new()).unwrap(), json!({"message": null, "progress": null}));
     }
@@ -136,6 +157,18 @@ mod tests {
         assert_eq!(fraction(1.5), json!(1.0));
         assert_eq!(fraction(-1.0), json!(0.0));
         assert_eq!(fraction(f64::NAN), json!(null));
+    }
+
+    /// Two saves say "Saved" twice: a new id makes the second a new message; older apps send none.
+    #[test]
+    fn a_message_id_tells_repeats_apart() {
+        let first = Status::new().info("Saved").message_id(1);
+        let second = Status::new().info("Saved").message_id(2);
+        assert_ne!(first, second);
+        assert_eq!(second.message().map(StatusMessage::id), Some(2));
+        assert_eq!(Status::new().message_id(3), Status::new(), "no message, nothing to number");
+        let old: Status = serde_json::from_value(json!({"message": {"text": "Saved", "tone": "info"}, "progress": null})).unwrap();
+        assert_eq!(old, Status::new().info("Saved"));
     }
 
     #[test]

@@ -195,10 +195,11 @@ pub(crate) enum Request {
     /// Open this native panel as the user would from its toolbar button (the app's own menu
     /// asked for it). A one-shot: never repeated to a shell that starts listening later.
     OpenPanel(PanelId),
-    /// The app's menu bar ([`MenuBar`] as JSON), sent when it changes and again when the shell
-    /// restarts.
+    /// The app's menu bar ([`MenuBar`] as JSON), sent when it changes (and again to a shell that
+    /// starts listening later, as kinds 3 and 13).
     Menus(String),
-    /// The app's status ([`Status`] as JSON), sent when it changes and again when the shell restarts.
+    /// The app's status ([`Status`] as JSON), sent when it changes (and again to a shell that starts
+    /// listening later).
     Status(String),
 }
 
@@ -270,10 +271,10 @@ struct Shared {
     writing: VecDeque<(Location, String)>,
     /// The clipboard as the shell read it for this frame's paste.
     pasted: Option<Rc<Pasted>>,
-    /// The menu bar last sent, and its JSON, for a shell that restarts.
-    menu: Option<(MenuBar, String)>,
-    /// The status last sent, and its JSON, for a shell that restarts.
-    status: Option<(Status, String)>,
+    /// The menu bar last sent: only a change is sent again.
+    menu: Option<MenuBar>,
+    /// The status last sent: only a change is sent again.
+    status: Option<Status>,
 }
 
 /// The app's handle on the native shell. Cheap to clone; everything runs on the app's thread.
@@ -386,16 +387,17 @@ impl Platform {
 
     /// Show `bar` as the app's menus, in the shell's native menu bar (when it declared
     /// [`crate::ui::Feature::Menus`]). Call it whenever the menus may have changed, every frame if
-    /// that's simplest: only a change is sent, and a shell that restarts gets the last one again.
+    /// that's simplest: only a change is sent, and a shell that starts listening later still gets the
+    /// last one.
     pub fn set_menu(&self, bar: MenuBar) {
         let mut shared = self.shared.borrow_mut();
-        if shared.menu.as_ref().is_some_and(|(sent, _)| *sent == bar) {
+        if shared.menu.as_ref() == Some(&bar) {
             return;
         }
         match serde_json::to_string(&bar) {
             Ok(json) => {
-                shared.out.push(Request::Menus(json.clone()));
-                shared.menu = Some((bar, json));
+                shared.out.push(Request::Menus(json));
+                shared.menu = Some(bar);
             }
             Err(e) => log::error!("craft-mobile: menus: {e}"),
         }
@@ -403,33 +405,20 @@ impl Platform {
 
     /// Show `status` in the shell's native status (when it declared [`crate::ui::Feature::Status`]):
     /// a message as a toast when it changes, progress while it lasts. Call it whenever the status may
-    /// have changed, every frame if that's simplest: only a change is sent, and a shell that restarts
-    /// gets the last one again.
+    /// have changed, every frame if that's simplest: only a change is sent, and a shell that starts
+    /// listening later still gets the last one.
     pub fn set_status(&self, status: Status) {
         let mut shared = self.shared.borrow_mut();
-        if shared.status.as_ref().is_some_and(|(sent, _)| *sent == status) {
+        if shared.status.as_ref() == Some(&status) {
             return;
         }
         match serde_json::to_string(&status) {
             Ok(json) => {
-                shared.out.push(Request::Status(json.clone()));
-                shared.status = Some((status, json));
+                shared.out.push(Request::Status(json));
+                shared.status = Some(status);
             }
             Err(e) => log::error!("craft-mobile: status: {e}"),
         }
-    }
-
-    /// The shell restarted: send it the menus and the status again.
-    pub(crate) fn resend_chrome(&self) {
-        let mut shared = self.shared.borrow_mut();
-        let again: Vec<Request> = [
-            shared.menu.as_ref().map(|(_, json)| Request::Menus(json.clone())),
-            shared.status.as_ref().map(|(_, json)| Request::Status(json.clone())),
-        ]
-        .into_iter()
-        .flatten()
-        .collect();
-        shared.out.extend(again);
     }
 
     /// Open a link in the system browser (or the app that handles it).
@@ -607,27 +596,23 @@ mod tests {
         MenuBar::new(vec![Menu::new("Edit", vec![MenuEntry::command("edit.undo", label).into()])]).unwrap()
     }
 
-    /// Kind 15, only when the menus changed, and again for a shell that restarts.
+    /// Kind 15, only when the menus changed (the Android driver keeps the last for a late shell).
     #[test]
-    fn menus_go_out_as_kind_15_when_they_change_and_again_on_a_restart() {
+    fn menus_go_out_as_kind_15_when_they_change() {
         let platform = Platform::default();
-        platform.resend_chrome();
-        assert!(wired(&platform).is_empty(), "no menus yet, nothing to send again");
         platform.set_menu(menu("Undo"));
         let first = wired(&platform);
         assert_eq!(first.len(), 1);
         assert!(first.first().is_some_and(|(k, t)| *k == 15 && t.contains("\"edit.undo\"")), "{first:?}");
         platform.set_menu(menu("Undo"));
         assert!(wired(&platform).is_empty(), "unchanged");
-        platform.resend_chrome();
-        assert_eq!(wired(&platform), first, "the shell restarted");
         platform.set_menu(menu("Undo Brush"));
         assert_eq!(wired(&platform).len(), 1);
     }
 
-    /// Kind 16, only when the status changed, and again (after the menus) for a shell that restarts.
+    /// Kind 16, only when the status changed; the same text with a new id is a change.
     #[test]
-    fn status_goes_out_as_kind_16_when_it_changes_and_again_on_a_restart() {
+    fn status_goes_out_as_kind_16_when_it_changes() {
         use crate::ui::Progress;
         let platform = Platform::default();
         platform.set_status(Status::new().info("Saved"));
@@ -637,10 +622,8 @@ mod tests {
         assert!(wired(&platform).is_empty(), "unchanged");
         platform.set_status(Status::new().info("Saved").progress(Progress::new("Exporting").fraction(0.5)));
         assert_eq!(wired(&platform).len(), 1);
-        platform.set_menu(menu("Undo"));
-        let _ = wired(&platform);
-        platform.resend_chrome();
-        assert_eq!(wired(&platform).iter().map(|(k, _)| *k).collect::<Vec<_>>(), [15, 16]);
+        platform.set_status(Status::new().info("Saved").message_id(2).progress(Progress::new("Exporting").fraction(0.5)));
+        assert_eq!(wired(&platform).len(), 1, "said again");
     }
 
     #[test]

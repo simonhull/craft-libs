@@ -80,14 +80,41 @@ impl TryFrom<MenuBarRepr> for MenuBar {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Menu {
     title: String,
+    /// Which system menu it stands for; `None` (also when left out) for one of the app's own.
+    #[serde(default)]
+    role: Option<MenuRole>,
     items: Vec<MenuEntry>,
 }
 
+/// The system menu an app menu takes the place of, so the shell matches them by role and never by
+/// a title that is translated.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MenuRole {
+    /// File.
+    File,
+    /// Edit.
+    Edit,
+    /// View.
+    View,
+    /// Window: the app's items go before the system's window items.
+    Window,
+    /// Help.
+    Help,
+}
+
 impl Menu {
-    /// A menu titled `title`, its entries top to bottom.
+    /// A menu of the app's own titled `title`, its entries top to bottom.
     #[must_use]
     pub fn new(title: impl Into<String>, items: Vec<MenuEntry>) -> Self {
-        Self { title: title.into(), items }
+        Self { title: title.into(), role: None, items }
+    }
+
+    /// The system menu it takes the place of.
+    #[must_use]
+    pub fn role(mut self, role: Option<MenuRole>) -> Self {
+        self.role = role;
+        self
     }
 
     /// Its title.
@@ -100,6 +127,12 @@ impl Menu {
     #[must_use]
     pub fn items(&self) -> &[MenuEntry] {
         &self.items
+    }
+
+    /// The system menu it takes the place of, if any.
+    #[must_use]
+    pub fn menu_role(&self) -> Option<MenuRole> {
+        self.role
     }
 }
 
@@ -219,6 +252,7 @@ mod tests {
                 MenuEntry::command("view.rulers", "Rulers").checked(Some(true)).into(),
             ],
         )
+        .role(Some(MenuRole::Edit))
     }
 
     #[test]
@@ -226,7 +260,7 @@ mod tests {
         let bar = MenuBar::new(vec![edit_menu()]).unwrap();
         assert_eq!(
             serde_json::to_value(&bar).unwrap(),
-            json!({"menus": [{"title": "Edit", "items": [
+            json!({"menus": [{"title": "Edit", "role": "edit", "items": [
                 {"type": "command", "id": "edit.undo", "label": "Undo", "shortcut": "Cmd+Z", "enabled": false, "checked": null},
                 {"type": "separator"},
                 {"type": "submenu", "label": "Transform", "items": [
@@ -257,6 +291,16 @@ mod tests {
         assert!(matches!(empty(Menu::new(" ", vec![])), UiError::EmptyLabel { .. }));
         assert!(matches!(empty(Menu::new("Edit", vec![MenuEntry::command("a", "").into()])), UiError::EmptyLabel { .. }));
         assert!(matches!(empty(Menu::new("Edit", vec![MenuEntry::submenu("", vec![])])), UiError::EmptyLabel { .. }));
+    }
+
+    /// Older apps send no role: the menu is one of their own.
+    #[test]
+    fn a_role_is_optional_on_the_wire() {
+        let bar: MenuBar = serde_json::from_value(json!({"menus": [{"title": "Bearbeiten", "items": []}]})).unwrap();
+        assert_eq!(bar, MenuBar::new(vec![Menu::new("Bearbeiten", vec![])]).unwrap());
+        let bar: MenuBar = serde_json::from_value(json!({"menus": [{"title": "Bearbeiten", "role": "edit", "items": []}]})).unwrap();
+        assert_eq!(bar.menus().first().and_then(Menu::menu_role), Some(MenuRole::Edit));
+        assert!(serde_json::from_value::<MenuBar>(json!({"menus": [{"title": "X", "role": "dock", "items": []}]})).is_err());
     }
 
     #[test]

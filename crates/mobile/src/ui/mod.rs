@@ -89,9 +89,9 @@ mod shell;
 mod status;
 
 pub use catalogue::{catalogue_json, catalogue_markdown};
-pub use command::{CommandId, Shortcut};
+pub use command::{CommandId, Shortcut, named_keys};
 pub use edit::{Edit, EditError, EditValue, GestureId, Message, Phase, Position, SelectMode};
-pub use menu::{Menu, MenuBar, MenuCommand, MenuEntry, Submenu};
+pub use menu::{Menu, MenuBar, MenuCommand, MenuEntry, MenuRole, Submenu};
 pub use node::{
     Choice, ChoiceOption, ControlId, ItemList, Node, Number, Panel, PanelId, PanelInfo, PanelRole, Row, RowId, Scale, Section, Toggle, Unit,
 };

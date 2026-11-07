@@ -237,13 +237,14 @@
     {
       "name": "menu_bar",
       "about": "The app's menus, in the iPad menu bar (pointer at the top edge, or hold ⌘) and a toolbar menu for touch. `Platform::set_menu` sends it whenever it changes (request kind 15), and again when the shell restarts.",
-      "fields": "`menus`, left to right, each a `title` and `items`. An item is a `command` (an `id` unique in the whole bar, a `label`, a `shortcut` in the portable form such as `Cmd+Shift+Z` or `null`, `enabled`, and `checked`: `true` or `false` for a check mark, `null` for none), a `separator`, or a `submenu` with a `label` and `items`. Labels are never empty. A shortcut's modifiers are `Ctrl`, `Cmd`, `Alt` and `Shift` (`Ctrl` is the Control key, not ⌘), then one key: a character or a named key (`Enter`, `Tab`, `ArrowUp`, `F5`).",
+      "fields": "`menus`, left to right, each a `title`, a `role` and `items`. The `role` (`file`, `edit`, `view`, `window` or `help`; `null` or left out for a menu of the app's own) says which system menu it takes the place of, matched by role and never by its translated title; Window keeps the system's window items after the app's. An item is a `command` (an `id` unique in the whole bar, a `label`, a `shortcut` in the portable form such as `Cmd+Shift+Z` or `null`, `enabled`, and `checked`: `true` or `false` for a check mark, `null` for none), a `separator`, or a `submenu` with a `label` and `items`. Labels are never empty. A shortcut's modifiers are `Ctrl`, `Cmd`, `Alt` and `Shift` (`Ctrl` is the Control key, not ⌘), then one key: a character or a named key (`Enter`, `Tab`, `ArrowUp`, `F5`).",
       "kind": 15,
       "sends": "a `command` with the item's `id` when the user picks an item without a shortcut; a `shortcut` with its `keys` when the item has one, or the keys are pressed on a hardware keyboard, so the app's own key handling decides, as for the key itself. Enabled and checked are read when a menu opens, so changing them alone redraws nothing.",
       "example": {
         "menus": [
           {
             "title": "Edit",
+            "role": "edit",
             "items": [
               {
                 "type": "command",
@@ -282,6 +283,7 @@
           },
           {
             "title": "View",
+            "role": "view",
             "items": [
               {
                 "type": "command",
@@ -290,6 +292,20 @@
                 "shortcut": "Cmd+R",
                 "enabled": true,
                 "checked": true
+              }
+            ]
+          },
+          {
+            "title": "Layer",
+            "role": null,
+            "items": [
+              {
+                "type": "command",
+                "id": "layer.new",
+                "label": "New Layer",
+                "shortcut": "Cmd+Shift+N",
+                "enabled": true,
+                "checked": null
               }
             ]
           }
@@ -309,13 +325,14 @@
     {
       "name": "status",
       "about": "What the app is telling the user: a message as a transient toast at the top (red for an error), and a long job as a progress capsule with a Cancel button. `Platform::set_status` sends it whenever it changes (request kind 16), and again when the shell restarts.",
-      "fields": "`message` (`null` for none): its `text` and its `tone`, `info` or `error`; a new message shows again, the same one stays dismissed. `progress` (`null` for none): a `label`, a `fraction` from 0 to 1 (`null` while unknown) and `cancel`, a command id or `null` for a job that can't be stopped.",
+      "fields": "`message` (`null` for none): its `text`, its `tone` (`info` or `error`) and an `id` (0 when left out). A message shows when its text, tone or id changes; give each new message a new id (`Status::message_id`) so the same text said again shows again. `progress` (`null` for none): a `label`, a `fraction` from 0 to 1 (`null` while unknown) and `cancel`, a command id or `null` for a job that can't be stopped.",
       "kind": 16,
       "sends": "the `cancel` command when the user taps Cancel.",
       "example": {
         "message": {
           "text": "Couldn't open b.psd: not a Photoshop file",
-          "tone": "error"
+          "tone": "error",
+          "id": 7
         },
         "progress": {
           "label": "Exporting a.png",
@@ -330,5 +347,220 @@
         }
       ]
     }
-  ]
+  ],
+  "shortcuts": {
+    "named_keys": [
+      "ArrowDown",
+      "ArrowLeft",
+      "ArrowRight",
+      "ArrowUp",
+      "Escape",
+      "Tab",
+      "Backspace",
+      "Enter",
+      "Insert",
+      "Delete",
+      "Home",
+      "End",
+      "PageUp",
+      "PageDown",
+      "Copy",
+      "Cut",
+      "Paste",
+      "Space",
+      "Colon",
+      "Comma",
+      "Minus",
+      "Period",
+      "Plus",
+      "Equals",
+      "Semicolon",
+      "OpenBracket",
+      "CloseBracket",
+      "OpenCurlyBracket",
+      "CloseCurlyBracket",
+      "Backtick",
+      "Backslash",
+      "Slash",
+      "Pipe",
+      "Questionmark",
+      "Exclamationmark",
+      "Quote",
+      "F1",
+      "F2",
+      "F3",
+      "F4",
+      "F5",
+      "F6",
+      "F7",
+      "F8",
+      "F9",
+      "F10",
+      "F11",
+      "F12",
+      "F13",
+      "F14",
+      "F15",
+      "F16",
+      "F17",
+      "F18",
+      "F19",
+      "F20",
+      "F21",
+      "F22",
+      "F23",
+      "F24",
+      "F25",
+      "F26",
+      "F27",
+      "F28",
+      "F29",
+      "F30",
+      "F31",
+      "F32",
+      "F33",
+      "F34",
+      "F35",
+      "BrowserBack",
+      "BrowserForward",
+      "BrowserRefresh",
+      "BrowserSearch",
+      "BrowserHome",
+      "BrowserFavorites",
+      "BrowserStop",
+      "MediaPlayPause",
+      "MediaTrackNext",
+      "MediaTrackPrevious",
+      "MediaStop",
+      "AudioVolumeMute",
+      "AudioVolumeDown",
+      "AudioVolumeUp",
+      "LaunchMail",
+      "LaunchApp1",
+      "LaunchApp2",
+      "ShiftLeft",
+      "ShiftRight",
+      "ControlLeft",
+      "ControlRight",
+      "AltLeft",
+      "AltRight",
+      "SuperLeft",
+      "SuperRight",
+      "IntlBackslash",
+      "CapsLock",
+      "NumLock",
+      "ScrollLock",
+      "PrintScreen",
+      "Pause",
+      "Menu",
+      "Fn",
+      "Eject",
+      "Help",
+      "Power",
+      "Sleep",
+      "Clear"
+    ],
+    "cases": [
+      {
+        "text": "Cmd+Shift+Z",
+        "parsed": "Cmd+Shift+Z"
+      },
+      {
+        "text": "Shift+Cmd+z",
+        "parsed": "Cmd+Shift+Z"
+      },
+      {
+        "text": "Cmd+Ctrl+M",
+        "parsed": "Ctrl+Cmd+M"
+      },
+      {
+        "text": "Ctrl+Tab",
+        "parsed": "Ctrl+Tab"
+      },
+      {
+        "text": "Alt+ArrowUp",
+        "parsed": "Alt+ArrowUp"
+      },
+      {
+        "text": "F5",
+        "parsed": "F5"
+      },
+      {
+        "text": "B",
+        "parsed": "B"
+      },
+      {
+        "text": "b",
+        "parsed": "B"
+      },
+      {
+        "text": "Cmd++",
+        "parsed": "Cmd++"
+      },
+      {
+        "text": "+",
+        "parsed": "+"
+      },
+      {
+        "text": "Cmd+-",
+        "parsed": "Cmd+-"
+      },
+      {
+        "text": "Cmd+[",
+        "parsed": "Cmd+["
+      },
+      {
+        "text": "Cmd+Enter",
+        "parsed": "Cmd+Enter"
+      },
+      {
+        "text": "",
+        "parsed": null
+      },
+      {
+        "text": "Cmd+",
+        "parsed": null
+      },
+      {
+        "text": "+Z",
+        "parsed": null
+      },
+      {
+        "text": "++Z",
+        "parsed": null
+      },
+      {
+        "text": "Cmd++Z",
+        "parsed": null
+      },
+      {
+        "text": "Cmd+Cmd+Z",
+        "parsed": null
+      },
+      {
+        "text": "Command+Z",
+        "parsed": null
+      },
+      {
+        "text": "cmd+Z",
+        "parsed": null
+      },
+      {
+        "text": "Cmd+Z+X",
+        "parsed": null
+      },
+      {
+        "text": "Cmd+Nope",
+        "parsed": null
+      },
+      {
+        "text": "Cmd+ ",
+        "parsed": null
+      },
+      {
+        "text": "Cmd+\n",
+        "parsed": null
+      }
+    ]
+  }
 }

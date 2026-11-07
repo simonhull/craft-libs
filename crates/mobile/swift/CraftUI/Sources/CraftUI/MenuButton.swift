@@ -51,21 +51,10 @@ struct CraftMenuItems: View {
                     } else {
                         Text(command.label)
                     }
-                    if let shortcut = command.shortcut { Text(CraftMenuItems.symbols(shortcut)) }
+                    if let shortcut = command.shortcut { Text(shortcut.glyphs) }
                 }
                 .disabled(!command.enabled)
             }
         }
-    }
-
-    /// A shortcut as the Mac and iPad show it: ⌃⌥⇧⌘ then the key (`⇧⌘Z`).
-    nonisolated static func symbols(_ shortcut: CraftShortcut) -> String {
-        let modifiers = [(shortcut.ctrl, "⌃"), (shortcut.alt, "⌥"), (shortcut.shift, "⇧"), (shortcut.cmd, "⌘")].filter(\.0).map(\.1).joined()
-        let keys = [
-            "Enter": "↩", "Tab": "⇥", "Space": "Space", "Backspace": "⌫", "Delete": "⌦", "Escape": "⎋",
-            "ArrowUp": "↑", "ArrowDown": "↓", "ArrowLeft": "←", "ArrowRight": "→", "PageUp": "⇞", "PageDown": "⇟",
-            "Home": "↖", "End": "↘",
-        ]
-        return modifiers + (keys[shortcut.key] ?? shortcut.key)
     }
 }

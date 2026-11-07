@@ -316,13 +316,14 @@ A `command` without `params` runs the app's command as its menu item does (`Craf
 
 The app's menus, in the iPad menu bar (pointer at the top edge, or hold ⌘) and a toolbar menu for touch. `Platform::set_menu` sends it whenever it changes (request kind 15), and again when the shell restarts.
 
-**Fields:** `menus`, left to right, each a `title` and `items`. An item is a `command` (an `id` unique in the whole bar, a `label`, a `shortcut` in the portable form such as `Cmd+Shift+Z` or `null`, `enabled`, and `checked`: `true` or `false` for a check mark, `null` for none), a `separator`, or a `submenu` with a `label` and `items`. Labels are never empty. A shortcut's modifiers are `Ctrl`, `Cmd`, `Alt` and `Shift` (`Ctrl` is the Control key, not ⌘), then one key: a character or a named key (`Enter`, `Tab`, `ArrowUp`, `F5`).
+**Fields:** `menus`, left to right, each a `title`, a `role` and `items`. The `role` (`file`, `edit`, `view`, `window` or `help`; `null` or left out for a menu of the app's own) says which system menu it takes the place of, matched by role and never by its translated title; Window keeps the system's window items after the app's. An item is a `command` (an `id` unique in the whole bar, a `label`, a `shortcut` in the portable form such as `Cmd+Shift+Z` or `null`, `enabled`, and `checked`: `true` or `false` for a check mark, `null` for none), a `separator`, or a `submenu` with a `label` and `items`. Labels are never empty. A shortcut's modifiers are `Ctrl`, `Cmd`, `Alt` and `Shift` (`Ctrl` is the Control key, not ⌘), then one key: a character or a named key (`Enter`, `Tab`, `ArrowUp`, `F5`).
 
 ```json
 {
   "menus": [
     {
       "title": "Edit",
+      "role": "edit",
       "items": [
         {
           "type": "command",
@@ -361,6 +362,7 @@ The app's menus, in the iPad menu bar (pointer at the top edge, or hold ⌘) and
     },
     {
       "title": "View",
+      "role": "view",
       "items": [
         {
           "type": "command",
@@ -369,6 +371,20 @@ The app's menus, in the iPad menu bar (pointer at the top edge, or hold ⌘) and
           "shortcut": "Cmd+R",
           "enabled": true,
           "checked": true
+        }
+      ]
+    },
+    {
+      "title": "Layer",
+      "role": null,
+      "items": [
+        {
+          "type": "command",
+          "id": "layer.new",
+          "label": "New Layer",
+          "shortcut": "Cmd+Shift+N",
+          "enabled": true,
+          "checked": null
         }
       ]
     }
@@ -389,13 +405,14 @@ For example:
 
 What the app is telling the user: a message as a transient toast at the top (red for an error), and a long job as a progress capsule with a Cancel button. `Platform::set_status` sends it whenever it changes (request kind 16), and again when the shell restarts.
 
-**Fields:** `message` (`null` for none): its `text` and its `tone`, `info` or `error`; a new message shows again, the same one stays dismissed. `progress` (`null` for none): a `label`, a `fraction` from 0 to 1 (`null` while unknown) and `cancel`, a command id or `null` for a job that can't be stopped.
+**Fields:** `message` (`null` for none): its `text`, its `tone` (`info` or `error`) and an `id` (0 when left out). A message shows when its text, tone or id changes; give each new message a new id (`Status::message_id`) so the same text said again shows again. `progress` (`null` for none): a `label`, a `fraction` from 0 to 1 (`null` while unknown) and `cancel`, a command id or `null` for a job that can't be stopped.
 
 ```json
 {
   "message": {
     "text": "Couldn't open b.psd: not a Photoshop file",
-    "tone": "error"
+    "tone": "error",
+    "id": 7
   },
   "progress": {
     "label": "Exporting a.png",

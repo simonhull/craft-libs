@@ -14,9 +14,20 @@ public struct CraftStatus: Decodable, Equatable, Sendable {
 
         public let text: String
         public let tone: Tone
+        /// A new id shows the same text again (`Status::message_id`); 0 when the app doesn't say.
+        public let id: UInt64
 
-        public init(text: String, tone: Tone = .info) {
-            (self.text, self.tone) = (text, tone)
+        public init(text: String, tone: Tone = .info, id: UInt64 = 0) {
+            (self.text, self.tone, self.id) = (text, tone, id)
+        }
+
+        private enum Key: String, CodingKey { case text, tone, id }
+
+        public init(from decoder: any Decoder) throws {
+            let c = try decoder.container(keyedBy: Key.self)
+            self = try Message(
+                text: c.decode(String.self, forKey: .text), tone: c.decode(Tone.self, forKey: .tone),
+                id: c.decodeIfPresent(UInt64.self, forKey: .id) ?? 0)
         }
     }
 
@@ -48,7 +59,7 @@ public struct CraftStatus: Decodable, Equatable, Sendable {
     }
 }
 
-/// The app's status over the canvas: a new message as a toast at the top that goes away by itself
+/// The app's status over the canvas: a new message (new text, tone or id) as a toast at the top that goes away by itself
 /// (an error, tinted red, stays longer; a tap dismisses it), and a job's progress as a capsule with
 /// Cancel at the bottom while it lasts. Cancel sends the job's command with `command`.
 public struct CraftStatusView: View {
@@ -163,7 +174,7 @@ struct CraftProgressCapsule: View {
 extension CraftStatus {
     /// The catalogue's example: an error and an export with Cancel.
     static let preview = CraftStatus(
-        message: Message(text: "Couldn't open b.psd: not a Photoshop file", tone: .error),
+        message: Message(text: "Couldn't open b.psd: not a Photoshop file", tone: .error, id: 7),
         progress: Progress(label: "Exporting a.png", fraction: 0.4, cancel: "job.cancel"))
 }
 

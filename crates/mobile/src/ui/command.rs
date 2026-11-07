@@ -21,7 +21,8 @@ id_newtype!(CommandId);
 ///   ⌃Z and ⌘Z are different shortcuts.
 /// - The key is one printable character (`Z`, `1`, `[`, `+` as in `Cmd++`), or a named key as
 ///   egui names it (`Enter`, `Escape`, `Tab`, `Space`, `Backspace`, `Delete`, `ArrowUp`, `F1`…).
-///   Letters are kept upper case.
+///   Letters are kept upper case; a key named by one of egui's aliases (`Esc`, `Return`) is kept
+///   under egui's canonical name ([`named_keys`]), so the shell only ever sees those.
 ///
 /// It prints back in a fixed order, `Ctrl+Cmd+Alt+Shift+Key`, so equal shortcuts print the same.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -112,15 +113,63 @@ impl Shortcut {
 }
 
 /// `key` as a shortcut keeps it, or `None` if it isn't one: a single printable character (a letter
-/// upper-cased), or egui's name for a key.
+/// upper-cased), or egui's canonical name for a key (any alias egui reads is accepted).
 fn key_name(key: &str) -> Option<String> {
     let mut chars = key.chars();
     match (chars.next(), chars.next()) {
         (Some(c), None) if !c.is_whitespace() && !c.is_control() => Some(c.to_uppercase().collect()),
-        (Some(_), Some(_)) => egui::Key::from_name(key).map(|_| key.to_owned()),
+        // egui's own name for it, whichever alias was written (`Esc` is `Escape`).
+        (Some(_), Some(_)) => egui::Key::from_name(key).map(canonical_name),
         _ => None,
     }
 }
+
+/// A key's name as a shortcut prints it: egui's, but arrows keep their `Arrow` (`ArrowUp`, as the
+/// shells and egui's own event names spell them, not `Up`).
+fn canonical_name(key: egui::Key) -> String {
+    use egui::Key;
+    match key {
+        Key::ArrowUp | Key::ArrowDown | Key::ArrowLeft | Key::ArrowRight => format!("Arrow{}", key.name()),
+        _ => key.name().to_owned(),
+    }
+}
+
+/// Every named key a [`Shortcut`] prints, as egui names it: what a shell must understand besides
+/// single characters.
+#[must_use]
+pub fn named_keys() -> Vec<String> {
+    egui::Key::ALL.iter().map(|k| canonical_name(*k)).filter(|name| name.chars().count() > 1).collect()
+}
+
+/// Texts and what [`Shortcut::parse`] makes of them (`None`: refused), for the shells' parsers to be
+/// tested against (the catalogue carries them).
+pub(crate) const PARSE_CASES: &[(&str, Option<&str>)] = &[
+    ("Cmd+Shift+Z", Some("Cmd+Shift+Z")),
+    ("Shift+Cmd+z", Some("Cmd+Shift+Z")),
+    ("Cmd+Ctrl+M", Some("Ctrl+Cmd+M")),
+    ("Ctrl+Tab", Some("Ctrl+Tab")),
+    ("Alt+ArrowUp", Some("Alt+ArrowUp")),
+    ("F5", Some("F5")),
+    ("B", Some("B")),
+    ("b", Some("B")),
+    ("Cmd++", Some("Cmd++")),
+    ("+", Some("+")),
+    ("Cmd+-", Some("Cmd+-")),
+    ("Cmd+[", Some("Cmd+[")),
+    ("Cmd+Enter", Some("Cmd+Enter")),
+    ("", None),
+    ("Cmd+", None),
+    ("+Z", None),
+    ("++Z", None),
+    ("Cmd++Z", None),
+    ("Cmd+Cmd+Z", None),
+    ("Command+Z", None),
+    ("cmd+Z", None),
+    ("Cmd+Z+X", None),
+    ("Cmd+Nope", None),
+    ("Cmd+ ", None),
+    ("Cmd+\n", None),
+];
 
 impl FromStr for Shortcut {
     type Err = UiError;
@@ -190,6 +239,29 @@ mod tests {
     fn bad_shortcuts_are_refused() {
         for text in ["", "Cmd+", "Cmd+Cmd+Z", "Command+Z", "Cmd+Z+X", "Cmd+Nope", "Cmd+ ", "cmd+Z", "Cmd+\n", "++Z"] {
             assert_eq!(Shortcut::parse(text).unwrap_err(), UiError::BadShortcut { shortcut: text.to_owned() }, "{text:?}");
+        }
+    }
+
+    /// The cases the catalogue gives the shells, which their parsers must agree with.
+    #[test]
+    fn the_shared_parse_cases_hold() {
+        for (text, expected) in PARSE_CASES {
+            assert_eq!(Shortcut::parse(text).ok().map(|s| s.to_string()).as_deref(), *expected, "{text:?}");
+        }
+    }
+
+    #[test]
+    fn aliases_print_as_eguis_canonical_names() {
+        assert_eq!(round_trip("Cmd+Esc"), "Cmd+Escape");
+        assert_eq!(round_trip("Return"), "Enter");
+        assert_eq!(round_trip("Up"), "ArrowUp");
+        let names = named_keys();
+        for name in ["Escape", "F5", "ArrowUp", "Enter", "Minus"] {
+            assert!(names.iter().any(|n| n == name), "{name}");
+        }
+        assert!(!names.iter().any(|n| n == "A"), "single characters aren't named keys");
+        for name in &names {
+            assert_eq!(&round_trip(name), name, "a canonical name prints as itself");
         }
     }
 

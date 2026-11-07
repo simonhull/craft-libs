@@ -22,7 +22,8 @@ import Testing
 
     @Test func theCataloguesMenusDecode() throws {
         let bar = try Self.catalogueMenus()
-        #expect(bar.menus.map(\.title) == ["Edit", "View"])
+        #expect(bar.menus.map(\.title) == ["Edit", "View", "Layer"])
+        #expect(bar.menus.map(\.role) == [.edit, .view, nil])
         let edit = try #require(bar.menus.first)
         #expect(edit.items.count == 4)
         #expect(edit.items.first == .command(CraftMenuCommand(id: "edit.undo", label: "Undo", shortcut: CraftShortcut("Cmd+Z"))))
@@ -30,6 +31,13 @@ import Testing
         #expect(bar.commands["edit.redo"]?.enabled == false)
         #expect(bar.commands["view.rulers"]?.checked == true)
         #expect(bar.commands["image.flip_horizontal"] != nil, "found inside a submenu")
+    }
+
+    /// A role this kit doesn't know, or none, is a menu of the app's own.
+    @Test func anUnknownRoleIsNone() throws {
+        let json = #"{"menus":[{"title":"Bearbeiten","role":"edit","items":[]},{"title":"Dock","role":"dock","items":[]},{"title":"Layer","items":[]}]}"#
+        let bar = try JSONDecoder().decode(CraftMenuBar.self, from: Data(json.utf8))
+        #expect(bar.menus.map(\.role) == [.edit, nil, nil])
     }
 
     /// A newer entry type, or a broken one, is skipped; so is a broken menu. The rest still show.
@@ -48,14 +56,27 @@ import Testing
         #expect(bar.menus.first?.items == [.command(CraftMenuCommand(id: "a", label: "A")), .separator])
     }
 
-    @Test func shortcutsParseAndPrintAsRustDoes() {
-        #expect(CraftShortcut("Shift+Cmd+z")?.text == "Cmd+Shift+Z")
-        #expect(CraftShortcut("Cmd++")?.key == "+")
-        #expect(CraftShortcut("Ctrl+Cmd+M")?.text == "Ctrl+Cmd+M")
-        #expect(CraftShortcut("F5")?.text == "F5")
-        #expect(CraftShortcut("Cmd+") == nil)
-        #expect(CraftShortcut("Cmd+Cmd+Z") == nil)
-        #expect(CraftShortcut("Hyper+Z") == nil)
+    struct ShortcutCases: Decodable {
+        struct Case: Decodable { let text: String; let parsed: String? }
+        let named_keys: [String]
+        let cases: [Case]
+    }
+
+    static func shortcutCases() throws -> ShortcutCases {
+        struct Catalogue: Decodable { let shortcuts: ShortcutCases }
+        let url = try #require(Bundle.module.url(forResource: "ui", withExtension: "json", subdirectory: "Fixtures"))
+        return try JSONDecoder().decode(Catalogue.self, from: Data(contentsOf: url)).shortcuts
+    }
+
+    /// The catalogue's cases are what Rust's `Shortcut::parse` makes of each text (its tests check the
+    /// same list): the Swift parser must agree, refusals included.
+    @Test func shortcutsParseAsRustDoes() throws {
+        let shared = try Self.shortcutCases()
+        #expect(shared.cases.count > 20)
+        for c in shared.cases {
+            #expect(CraftShortcut(c.text)?.text == c.parsed, "\(c.text.debugDescription)")
+        }
+        #expect(CraftShortcut.namedKeys == Set(shared.named_keys), "the named keys Rust prints")
         let ctrl = CraftShortcut("Ctrl+Z")
         #expect(ctrl?.ctrl == true && ctrl?.cmd == false, "Ctrl is the Control key, never ⌘")
     }
@@ -67,7 +88,7 @@ import Testing
         #expect(CraftMenuCommand(id: "image.flip", label: "Flip").message == .command("image.flip"))
     }
 
-    /// Only a structural change rebuilds the menu bar; enabled and checked are read as menus open.
+    /// Only a structural change rebuilds the menu bar; labels, enabled and checked are read as menus open.
     @Test @MainActor func onlyAStructuralChangeRebuilds() throws {
         let menus = CraftMenus()
         var rebuilds = 0
@@ -89,12 +110,33 @@ import Testing
         menus.choose("nope")
         #expect(sent == [.command("view.rulers")])
         menus.update(bar(enabled: true, checked: true, label: "Show Rulers"))
+        #expect(rebuilds == 1, "a new label (Undo Brush Stroke, Undo Smudge) is read as the menu opens")
+        #expect(menus.commands["view.rulers"]?.label == "Show Rulers")
+        menus.update(CraftMenuBar(menus: [CraftMenu(title: "View", items: [.separator])]))
         #expect(rebuilds == 2)
     }
 
-    @Test func shortcutsShowAsSymbols() {
-        #expect(CraftMenuItems.symbols(CraftShortcut("Cmd+Shift+Z")!) == "⇧⌘Z")
-        #expect(CraftMenuItems.symbols(CraftShortcut("Ctrl+Alt+ArrowUp")!) == "⌃⌥↑")
+    /// The canvas lets a press go on to the menu only when it is an enabled item's key command.
+    @Test @MainActor func onlyAnEnabledKeyCommandClaimsAPress() {
+        let menus = CraftMenus()
+        menus.update(CraftMenuBar(menus: [CraftMenu(title: "Edit", items: [
+            .command(CraftMenuCommand(id: "undo", label: "Undo", shortcut: CraftShortcut("Cmd+Z"))),
+            .command(CraftMenuCommand(id: "redo", label: "Redo", shortcut: CraftShortcut("Cmd+Shift+Z"), enabled: false)),
+            .command(CraftMenuCommand(id: "zoom", label: "Zoom Out", shortcut: CraftShortcut("Cmd+-"))),
+            .command(CraftMenuCommand(id: "brush", label: "Brush", shortcut: CraftShortcut("B"))),
+        ])]))
+        #expect(menus.claims(CraftShortcut(key: "Z", cmd: true)))
+        #expect(!menus.claims(CraftShortcut(key: "Z", cmd: true, shift: true)), "disabled: the app decides")
+        #expect(menus.claims(CraftShortcut(key: "Minus", cmd: true)), "Minus is -")
+        #expect(!menus.claims(CraftShortcut(key: "B")), "not a key command")
+        #expect(!menus.claims(CraftShortcut(key: "Z", ctrl: true)), "⌃Z isn't ⌘Z")
+    }
+
+    @Test func shortcutsShowAsGlyphs() {
+        #expect(CraftShortcut("Cmd+Shift+Z")?.glyphs == "⇧⌘Z")
+        #expect(CraftShortcut("Ctrl+Alt+ArrowUp")?.glyphs == "⌃⌥↑")
+        #expect(CraftShortcut("Cmd+Minus")?.glyphs == "⌘-")
+        #expect(CraftShortcut("B")?.glyphs == "B")
     }
 }
 
@@ -106,7 +148,7 @@ import UIKit
 
     @Test func menusHaveTitlesGroupsAndSubmenus() throws {
         let menus = CraftMenuBuilder.menus(try MenuTests.catalogueMenus(), action: action)
-        #expect(menus.map(\.title) == ["Edit", "View"])
+        #expect(menus.map(\.title) == ["Edit", "View", "Layer"])
         let edit = try #require(menus.first)
         // The separator splits Edit into two inline groups: Undo and Redo, then Transform.
         #expect(edit.children.count == 2)
@@ -116,7 +158,7 @@ import UIKit
         let transform = try #require(groups.last?.children.first as? UIMenu)
         #expect(transform.title == "Transform")
         #expect((transform.children.first as? UICommand)?.propertyList as? String == "image.flip_horizontal")
-        #expect(menus.map(\.identifier) == [CraftMenuBuilder.identifier(0, "Edit"), CraftMenuBuilder.identifier(1, "View")])
+        #expect(menus.map(\.identifier) == [CraftMenuBuilder.identifier(0, "Edit"), CraftMenuBuilder.identifier(1, "View"), CraftMenuBuilder.identifier(2, "Layer")])
     }
 
     @Test func shortcutsBecomeKeyCommands() throws {
@@ -139,7 +181,7 @@ import UIKit
         for keys in ["B", "Alt+ArrowUp", "Shift+F5", "F5"] {
             let element = CraftMenuBuilder.element(CraftMenuCommand(id: "t", label: "Tool", shortcut: CraftShortcut(keys)), action: action)
             #expect(!(element is UIKeyCommand), "\(keys)")
-            #expect((element as? UICommand)?.title == "Tool\t\(CraftShortcut(keys)?.text ?? "")", "\(keys)")
+            #expect((element as? UICommand)?.title == "Tool\t\(CraftShortcut(keys)?.glyphs ?? "")", "\(keys)")
         }
     }
 
@@ -148,7 +190,17 @@ import UIKit
         #expect(!(plain is UIKeyCommand) && (plain as? UICommand)?.title == "Flip")
         let odd = CraftMenuBuilder.element(CraftMenuCommand(id: "b", label: "Odd", shortcut: CraftShortcut("Cmd+Insert")), action: action)
         #expect(!(odd is UIKeyCommand))
-        #expect((odd as? UICommand)?.title == "Odd\tCmd+Insert")
+        #expect((odd as? UICommand)?.title == "Odd\t⌘Insert")
+    }
+
+    /// Menus take system menus' places by role, never by their (translated) titles.
+    @Test func menusArePlacedByRole() {
+        #expect(CraftMenuDelegate.placement(.file) == .replace(.file))
+        #expect(CraftMenuDelegate.placement(.edit) == .replace(.edit))
+        #expect(CraftMenuDelegate.placement(.view) == .replace(.view))
+        #expect(CraftMenuDelegate.placement(.help) == .replace(.help))
+        #expect(CraftMenuDelegate.placement(.window) == .startOfWindow)
+        #expect(CraftMenuDelegate.placement(nil) == .beforeWindow)
     }
 
     @Test func leadingTrailingAndRepeatedSeparatorsAreDropped() {

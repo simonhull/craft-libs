@@ -48,12 +48,27 @@ enum ChromeExample {
     Status(Status),
 }
 
+/// What a shell's shortcut parser must agree with: the named keys a shortcut prints, and texts with
+/// what `Shortcut::parse` makes of them (`null`: refused).
+#[derive(Serialize)]
+struct Shortcuts {
+    named_keys: Vec<String>,
+    cases: Vec<ShortcutCase>,
+}
+
+#[derive(Serialize)]
+struct ShortcutCase {
+    text: &'static str,
+    parsed: Option<&'static str>,
+}
+
 /// The whole catalogue, as `ui.json` holds it.
 #[derive(Serialize)]
 struct Catalogue {
     version: u32,
     primitives: Vec<Primitive>,
     chrome: Vec<Chrome>,
+    shortcuts: Shortcuts,
 }
 
 /// An edit to a control of the `layers` panel.
@@ -153,22 +168,27 @@ fn example_menu_bar() -> MenuBar {
     let rulers = MenuEntry::command("view.rulers", "Rulers").shortcut("Cmd+R".parse().ok()).checked(Some(true));
     let flip = MenuEntry::command("image.flip_horizontal", "Flip Horizontal");
     let menus = vec![
-        Menu::new("Edit", vec![undo.into(), redo.into(), MenuEntry::Separator, MenuEntry::submenu("Transform", vec![flip.into()])]),
-        Menu::new("View", vec![rulers.into()]),
+        Menu::new("Edit", vec![undo.into(), redo.into(), MenuEntry::Separator, MenuEntry::submenu("Transform", vec![flip.into()])])
+            .role(Some(super::MenuRole::Edit)),
+        Menu::new("View", vec![rulers.into()]).role(Some(super::MenuRole::View)),
+        Menu::new("Layer", vec![MenuEntry::command("layer.new", "New Layer").shortcut("Cmd+Shift+N".parse().ok()).into()]),
     ];
     MenuBar::new(menus).unwrap_or_default()
 }
 
 /// A status for the catalogue: an error, and a job with a Cancel button.
 fn example_status() -> Status {
-    Status::new().error("Couldn't open b.psd: not a Photoshop file").progress(Progress::new("Exporting a.png").fraction(0.4).cancel("job.cancel"))
+    Status::new()
+        .error("Couldn't open b.psd: not a Photoshop file")
+        .message_id(7)
+        .progress(Progress::new("Exporting a.png").fraction(0.4).cancel("job.cancel"))
 }
 
 fn chrome() -> Vec<Chrome> {
     let status = Chrome {
         name: "status",
         about: "What the app is telling the user: a message as a transient toast at the top (red for an error), and a long job as a progress capsule with a Cancel button. `Platform::set_status` sends it whenever it changes (request kind 16), and again when the shell restarts.",
-        fields: "`message` (`null` for none): its `text` and its `tone`, `info` or `error`; a new message shows again, the same one stays dismissed. `progress` (`null` for none): a `label`, a `fraction` from 0 to 1 (`null` while unknown) and `cancel`, a command id or `null` for a job that can't be stopped.",
+        fields: "`message` (`null` for none): its `text`, its `tone` (`info` or `error`) and an `id` (0 when left out). A message shows when its text, tone or id changes; give each new message a new id (`Status::message_id`) so the same text said again shows again. `progress` (`null` for none): a `label`, a `fraction` from 0 to 1 (`null` while unknown) and `cancel`, a command id or `null` for a job that can't be stopped.",
         kind: 16,
         sends: "the `cancel` command when the user taps Cancel.",
         example: ChromeExample::Status(example_status()),
@@ -178,7 +198,7 @@ fn chrome() -> Vec<Chrome> {
         Chrome {
             name: "menu_bar",
             about: "The app's menus, in the iPad menu bar (pointer at the top edge, or hold ⌘) and a toolbar menu for touch. `Platform::set_menu` sends it whenever it changes (request kind 15), and again when the shell restarts.",
-            fields: "`menus`, left to right, each a `title` and `items`. An item is a `command` (an `id` unique in the whole bar, a `label`, a `shortcut` in the portable form such as `Cmd+Shift+Z` or `null`, `enabled`, and `checked`: `true` or `false` for a check mark, `null` for none), a `separator`, or a `submenu` with a `label` and `items`. Labels are never empty. A shortcut's modifiers are `Ctrl`, `Cmd`, `Alt` and `Shift` (`Ctrl` is the Control key, not ⌘), then one key: a character or a named key (`Enter`, `Tab`, `ArrowUp`, `F5`).",
+            fields: "`menus`, left to right, each a `title`, a `role` and `items`. The `role` (`file`, `edit`, `view`, `window` or `help`; `null` or left out for a menu of the app's own) says which system menu it takes the place of, matched by role and never by its translated title; Window keeps the system's window items after the app's. An item is a `command` (an `id` unique in the whole bar, a `label`, a `shortcut` in the portable form such as `Cmd+Shift+Z` or `null`, `enabled`, and `checked`: `true` or `false` for a check mark, `null` for none), a `separator`, or a `submenu` with a `label` and `items`. Labels are never empty. A shortcut's modifiers are `Ctrl`, `Cmd`, `Alt` and `Shift` (`Ctrl` is the Control key, not ⌘), then one key: a character or a named key (`Enter`, `Tab`, `ArrowUp`, `F5`).",
             kind: 15,
             sends: "a `command` with the item's `id` when the user picks an item without a shortcut; a `shortcut` with its `keys` when the item has one, or the keys are pressed on a hardware keyboard, so the app's own key handling decides, as for the key itself. Enabled and checked are read when a menu opens, so changing them alone redraws nothing.",
             example: ChromeExample::MenuBar(example_menu_bar()),
@@ -195,7 +215,11 @@ fn chrome() -> Vec<Chrome> {
 /// chrome: [{name, about, fields, kind, sends, example, messages}]}`.
 #[must_use]
 pub fn catalogue_json() -> String {
-    let catalogue = Catalogue { version: VERSION, primitives: examples(), chrome: chrome() };
+    let shortcuts = Shortcuts {
+        named_keys: super::named_keys(),
+        cases: super::command::PARSE_CASES.iter().map(|&(text, parsed)| ShortcutCase { text, parsed }).collect(),
+    };
+    let catalogue = Catalogue { version: VERSION, primitives: examples(), chrome: chrome(), shortcuts };
     let mut s = serde_json::to_string_pretty(&catalogue).unwrap_or_default();
     s.push('\n');
     s
@@ -339,7 +363,7 @@ mod tests {
         let menu_bar = chrome().into_iter().find(|c| c.name == "menu_bar").unwrap();
         let json = serde_json::to_string(&menu_bar.example).unwrap();
         assert_eq!(serde_json::from_str::<MenuBar>(&json).unwrap(), example_menu_bar());
-        assert_eq!(example_menu_bar().menus().len(), 2, "valid, not the empty default");
+        assert_eq!(example_menu_bar().menus().len(), 3, "valid, not the empty default");
         let status = chrome().into_iter().find(|c| c.name == "status").unwrap();
         assert_eq!(serde_json::from_str::<Status>(&serde_json::to_string(&status.example).unwrap()).unwrap(), example_status());
         for c in chrome() {

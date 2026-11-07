@@ -400,11 +400,6 @@ impl<A: CraftApp> HostOps for Host<A> {
         match control {
             // Only the shell's state, nothing for the app to run: the next frame describes them.
             Control::Ui(ui::Message::OpenPanels { open }) => self.panels.open(open),
-            // A shell that (re)starts gets the chrome again; the app hears what it draws in the frame.
-            Control::Shell(features) => {
-                self.platform.resend_chrome();
-                self.controls.push(Control::Shell(features));
-            }
             control => self.controls.push(control),
         }
         self.wake();
