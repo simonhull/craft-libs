@@ -17,6 +17,8 @@ public struct CraftEdit: Encodable, Equatable, Sendable {
         case number(Double), toggle(Bool), choice(String)
         case select(row: UInt64, mode: SelectMode = .replace), setVisible(row: UInt64, visible: Bool), rename(row: UInt64, name: String)
         case move(row: UInt64, target: UInt64, position: Position)
+        /// One of a row's actions (``CraftRowAction``) was chosen.
+        case action(row: UInt64, action: String)
     }
 
     public let panel: String
@@ -32,7 +34,7 @@ public struct CraftEdit: Encodable, Equatable, Sendable {
 
     private enum Key: String, CodingKey { case action, panel, control, phase, gesture, value }
     private enum ValueKey: String, CodingKey { case kind, value }
-    private enum RowKey: String, CodingKey { case row, mode, visible, name, target, position }
+    private enum RowKey: String, CodingKey { case row, mode, visible, name, target, position, action }
 
     public func encode(to encoder: any Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
@@ -73,6 +75,11 @@ public struct CraftEdit: Encodable, Equatable, Sendable {
             try r.encode(row, forKey: .row)
             try r.encode(target, forKey: .target)
             try r.encode(position, forKey: .position)
+        case let .action(row, action):
+            try v.encode("action", forKey: .kind)
+            var r = v.nestedContainer(keyedBy: RowKey.self, forKey: .value)
+            try r.encode(row, forKey: .row)
+            try r.encode(action, forKey: .action)
         }
     }
 }

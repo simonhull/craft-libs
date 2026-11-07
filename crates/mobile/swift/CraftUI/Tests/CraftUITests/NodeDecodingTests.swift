@@ -133,6 +133,7 @@ enum JSONValue: Decodable, Equatable {
             (.setVisible(row: 2, visible: false), #"{"kind":"set_visible","value":{"row":2,"visible":false}}"#),
             (.rename(row: 4, name: "Sky"), #"{"kind":"rename","value":{"row":4,"name":"Sky"}}"#),
             (.move(row: 4, target: 9, position: .below), #"{"kind":"move","value":{"row":4,"target":9,"position":"below"}}"#),
+            (.action(row: 4, action: "close"), #"{"kind":"action","value":{"row":4,"action":"close"}}"#),
         ]
         for (value, json) in edits {
             let edit = CraftEdit(panel: "layers", control: "rows", phase: .commit, gesture: 1, value: value)
@@ -140,5 +141,30 @@ enum JSONValue: Decodable, Equatable {
             let expected = try JSONDecoder().decode(JSONValue.self, from: Data(#"{"action":"edit","panel":"layers","control":"rows","phase":"commit","gesture":1,"value":\#(json)}"#.utf8))
             #expect(encoded == expected)
         }
+    }
+
+    /// The catalogue's layer rows carry a plain and a destructive action.
+    @Test func theCataloguesRowsHaveActions() throws {
+        let entry = try #require(try Self.catalogue().primitives.first { $0.name == "item_list" })
+        guard case let .itemList(_, rows, _) = entry.example else {
+            Issue.record("item_list didn't decode: \(entry.example)")
+            return
+        }
+        let actions = try #require(rows.first?.actions)
+        #expect(actions == [
+            CraftRowAction(id: "duplicate", label: "Duplicate", icon: "plus.square.on.square"),
+            CraftRowAction(id: "delete", label: "Delete", icon: "trash", destructive: true),
+        ])
+        #expect(actions.filter(\.destructive).map(\.id) == ["delete"], "the swipe actions")
+    }
+
+    /// A row from an older app has no actions; an action may leave out its icon and destructive; one
+    /// that doesn't decode is skipped, the others kept.
+    @Test func rowActionsAreOptionalAndLenient() throws {
+        let old = try JSONDecoder().decode(CraftRow.self, from: Data(#"{"id":1,"title":"a","subtitle":"","depth":0,"visible":null,"selected":false}"#.utf8))
+        #expect(old.actions.isEmpty)
+        let json = #"{"id":1,"title":"a","subtitle":"","depth":0,"visible":null,"selected":false,"actions":[{"id":"close","label":"Close"},{"label":"no id"},{"id":"rm","label":"Remove","icon":"trash","destructive":true}]}"#
+        let row = try JSONDecoder().decode(CraftRow.self, from: Data(json.utf8))
+        #expect(row.actions == [CraftRowAction(id: "close", label: "Close"), CraftRowAction(id: "rm", label: "Remove", icon: "trash", destructive: true)])
     }
 }

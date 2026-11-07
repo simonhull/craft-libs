@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{ControlId, PanelId, RowId};
+use super::{ActionId, ControlId, PanelId, RowId};
 
 /// Where a gesture is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -81,6 +81,13 @@ pub enum EditValue {
         target: RowId,
         /// Above or below that row.
         position: Position,
+    },
+    /// One of a row's actions ([`super::RowAction`]) was chosen; always a [`Phase::Commit`].
+    Action {
+        /// The row's id.
+        row: RowId,
+        /// The action's id.
+        action: ActionId,
     },
 }
 
@@ -202,6 +209,15 @@ mod tests {
         let m: Message = serde_json::from_str(r#"{"action":"edit","panel":"layers","control":"rows","phase":"commit","gesture":2,"value":{"kind":"move","value":{"row":4,"target":9,"position":"below"}}}"#).unwrap();
         let Message::Edit(edit) = m else { panic!("not an edit: {m:?}") };
         assert_eq!(edit.value, EditValue::Move { row: 4.into(), target: 9.into(), position: Position::Below });
+    }
+
+    /// A row action names the row and the action: exactly what the Swift `CraftEdit` encodes.
+    #[test]
+    fn a_row_action_parses() {
+        let m: Message = serde_json::from_str(r#"{"action":"edit","panel":"documents","control":"documents","phase":"commit","gesture":4,"value":{"kind":"action","value":{"row":2,"action":"close"}}}"#).unwrap();
+        let Message::Edit(edit) = m else { panic!("not an edit: {m:?}") };
+        assert_eq!(edit.value, EditValue::Action { row: 2.into(), action: "close".into() });
+        assert_eq!(serde_json::to_value(&edit.value).unwrap(), json!({"kind": "action", "value": {"row": 2, "action": "close"}}));
     }
 
     #[test]

@@ -210,7 +210,8 @@ extension [CraftRow] {
             guard let at = rows.firstIndex(where: { $0.id == target }) else { return self }
             rows.insert(moving, at: position == .above ? at : at + 1)
             return rows
-        case .number, .toggle, .choice:
+        case .number, .toggle, .choice, .action:
+            // An action means what the app says it does; the Gallery only logs it (Edits Sent).
             return self
         }
     }
@@ -220,7 +221,7 @@ extension CraftRow {
     func with(title: String? = nil, visible: Bool? = nil, selected: Bool? = nil) -> CraftRow {
         CraftRow(
             id: id, title: title ?? self.title, subtitle: subtitle, depth: depth,
-            visible: visible ?? self.visible, selected: selected ?? self.selected)
+            visible: visible ?? self.visible, selected: selected ?? self.selected, actions: actions)
     }
 }
 

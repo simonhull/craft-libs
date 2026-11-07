@@ -7,7 +7,7 @@ use serde::Serialize;
 
 use super::{
     Choice, ChoiceOption, Edit, EditValue, Icon, ItemList, Menu, MenuBar, MenuEntry, Message, Node, Number, Panel, PanelInfo, PanelRole, Phase,
-    Position, Progress, Published, Row, Scale, Section, Status, Toggle, Tool, ToolPalette, ToolSlot, Unit,
+    Position, Progress, Published, Row, RowAction, Scale, Section, Status, Toggle, Tool, ToolPalette, ToolSlot, Unit,
 };
 
 /// The catalogue's format version; bump it when a node's JSON changes.
@@ -122,12 +122,11 @@ fn examples() -> Vec<Primitive> {
     });
     out.push(Primitive {
         name: "item_list",
-        about: "Rows of items such as layers, top to bottom: tap to select, swipe to hide, long-press to rename, drag to reorder. Select in the header picks several rows, tap by tap, until Done; with a keyboard, Shift-tap selects a range and Command-tap adds or removes a row.",
-        fields: "each row's `id` is the app's own and unique in the list; `depth` indents it (inside groups); `visible: null` means it can't be hidden; `reorderable` allows dragging.",
-        sends: "`select`, `set_visible`, `rename` and (when reorderable) `move` edits, each one `commit`, naming rows by their `id`. A `select` has a `mode`: `replace` (a plain tap; also when left out), `toggle` (add the row or take it out) or `range` (from the last row selected to this one). A `move` names the row dragged; an app moves the whole selection when that row is one of several selected.",
+        about: "Rows of items such as layers, top to bottom: tap to select, swipe to hide, long-press for Rename and the row's own actions, drag to reorder. Select in the header picks several rows, tap by tap, until Done; with a keyboard, Shift-tap selects a range and Command-tap adds or removes a row.",
+        fields: "each row's `id` is the app's own and unique in the list; `depth` indents it (inside groups); `visible: null` means it can't be hidden; `reorderable` allows dragging. A row's `actions` (left out: none) are what the user can do to it, in its context menu after Rename: each has an `id` unique in the row, a `label`, an `icon` (an SF Symbol name, or `null`) and `destructive` (tinted red, and a trailing swipe action too); `icon` and `destructive` may be left out.",
+        sends: "`select`, `set_visible`, `rename`, `action` and (when reorderable) `move` edits, each one `commit`, naming rows by their `id`. A `select` has a `mode`: `replace` (a plain tap; also when left out), `toggle` (add the row or take it out) or `range` (from the last row selected to this one). An `action` names the row and the action's `id`: `{\"kind\":\"action\",\"value\":{\"row\":2,\"action\":\"delete\"}}`. A `move` names the row dragged; an app moves the whole selection when that row is one of several selected.",
         example: Node::ItemList(
-            ItemList::new("layers", vec![Row::new(2, "Sky").subtitle("Pixel").visible(Some(true)).selected(true), Row::new(1, "Background").subtitle("Pixel").visible(Some(true))])
-                .reorderable(true),
+            ItemList::new("layers", vec![example_row(2, "Sky").selected(true), example_row(1, "Background")]).reorderable(true),
         ),
         edit: Some(edit("layers", Phase::Commit, 10, EditValue::Move { row: 1.into(), target: 2.into(), position: Position::Above })),
     });
@@ -142,6 +141,15 @@ fn examples() -> Vec<Primitive> {
         });
     }
     out
+}
+
+/// A layer row for the catalogue, with a plain and a destructive action.
+fn example_row(id: u64, title: &str) -> Row {
+    let actions = vec![
+        RowAction::new("duplicate", "Duplicate").icon(Some("plus.square.on.square")),
+        RowAction::new("delete", "Delete").icon(Some("trash")).destructive(true),
+    ];
+    Row::new(id, title).subtitle("Pixel").visible(Some(true)).actions(actions)
 }
 
 /// A palette for the catalogue: a one-tool slot, a slot with a flyout, a letter-only icon, and

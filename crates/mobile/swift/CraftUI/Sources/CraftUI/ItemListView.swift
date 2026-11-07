@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Rows of items such as layers: tap to select, swipe or tap the eye to hide, long-press to rename,
-/// drag to reorder (when `reorderable`). Select (in the header) picks several rows, a tap adding or
+/// Rows of items such as layers: tap to select, swipe or tap the eye to hide, long-press to rename or
+/// for the row's own actions (a destructive one is a swipe too), drag to reorder (when `reorderable`). Select (in the header) picks several rows, a tap adding or
 /// removing each, until Done; with a hardware keyboard, Command-tap does the same and Shift-tap
 /// selects a range. Selected rows are tinted.
 struct CraftItemListView: View {
@@ -68,18 +68,47 @@ struct CraftItemListView: View {
         .modifiedTap { select(row, modifiers: $0) }
         .listRowBackground(row.selected ? Color.accentColor.opacity(0.18) : nil)
         .swipeActions(edge: .trailing) {
+            // The first is the full swipe's: a destructive action is never run by a swipe alone.
             if let visible = row.visible {
                 Button(visible ? "Hide" : "Show") { one(.setVisible(row: row.id, visible: !visible)) }
             }
+            ForEach(Self.swipeActions(row)) { action in
+                actionButton(action, row: row)
+            }
         }
         .contextMenu {
-            Button("Rename…") { startRenaming(row) }
+            Button("Rename…", systemImage: "pencil") { startRenaming(row) }
+            if !row.actions.isEmpty {
+                Divider()
+                ForEach(row.actions) { action in
+                    actionButton(action, row: row)
+                }
+            }
         }
         .modifier(RowAccessibility(
             row: row,
             select: { select(row, modifiers: []) },
             setVisible: { one(.setVisible(row: row.id, visible: $0)) },
-            rename: { startRenaming(row) }))
+            rename: { startRenaming(row) },
+            act: { one(.action(row: row.id, action: $0.id)) }))
+    }
+
+    /// One of the row's actions, red when destructive.
+    private func actionButton(_ action: CraftRowAction, row: CraftRow) -> some View {
+        Button(role: action.destructive ? .destructive : nil) {
+            one(.action(row: row.id, action: action.id))
+        } label: {
+            if let icon = action.icon {
+                Label(action.label, systemImage: icon)
+            } else {
+                Text(action.label)
+            }
+        }
+    }
+
+    /// The row's actions offered as a trailing swipe: the destructive ones, in the app's order.
+    nonisolated static func swipeActions(_ row: CraftRow) -> [CraftRowAction] {
+        row.actions.filter(\.destructive)
     }
 
     private func select(_ row: CraftRow, modifiers: EventModifiers) {
@@ -173,12 +202,14 @@ extension View {
     }
 #endif
 
-/// One VoiceOver element per row: activating it selects the row; hiding and renaming are named actions.
+/// One VoiceOver element per row: activating it selects the row; hiding, renaming and the row's own
+/// actions are named actions.
 private struct RowAccessibility: ViewModifier {
     let row: CraftRow
     let select: () -> Void
     let setVisible: (Bool) -> Void
     let rename: () -> Void
+    let act: (CraftRowAction) -> Void
 
     func body(content: Content) -> some View {
         let traits: AccessibilityTraits = row.selected ? [.isButton, .isSelected] : [.isButton]
@@ -194,6 +225,9 @@ private struct RowAccessibility: ViewModifier {
                     Button(visible ? "Hide" : "Show") { setVisible(!visible) }
                 }
                 Button("Rename", action: rename)
+                ForEach(row.actions) { action in
+                    Button(action.label) { act(action) }
+                }
             }
     }
 }

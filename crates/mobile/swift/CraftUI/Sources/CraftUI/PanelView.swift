@@ -122,12 +122,18 @@ extension CraftPanel {
             .toggle(id: "locked", label: "Lock", value: false, enabled: true),
         ]),
         .itemList(id: "layers", rows: [
-            .init(id: 2, title: "Sky", subtitle: "Pixel", depth: 0, visible: true, selected: true),
-            .init(id: 1, title: "Background", subtitle: "Pixel", depth: 0, visible: false, selected: false),
+            .init(id: 2, title: "Sky", subtitle: "Pixel", depth: 0, visible: true, selected: true, actions: previewRowActions),
+            .init(id: 1, title: "Background", subtitle: "Pixel", depth: 0, visible: false, selected: false, actions: previewRowActions),
         ], reorderable: true),
         .unknown(type: "hologram"),
         .malformed(type: "number"),
     ])
+
+    /// The catalogue's row actions: Duplicate, and Delete (destructive, so a swipe too).
+    static let previewRowActions = [
+        CraftRowAction(id: "duplicate", label: "Duplicate", icon: "plus.square.on.square"),
+        CraftRowAction(id: "delete", label: "Delete", icon: "trash", destructive: true),
+    ]
 
     /// A tool popover with a menu choice, stepped numbers (Size on a log scale) and a collapsed
     /// section, for previews.

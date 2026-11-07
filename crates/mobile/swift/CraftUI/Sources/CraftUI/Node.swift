@@ -56,15 +56,6 @@ public struct CraftPanels: Decodable, Equatable, Sendable {
         panels = try c.decode([Skippable<CraftPanelInfo>].self, forKey: .panels).compactMap(\.value)
         open = try c.decode([String: Skippable<CraftPanel>].self, forKey: .open).compactMapValues(\.value)
     }
-
-    /// One entry of a list, `nil` if it doesn't decode, so the list moves past it.
-    private struct Skippable<T: Decodable>: Decodable {
-        let value: T?
-
-        init(from decoder: any Decoder) {
-            value = try? T(from: decoder)
-        }
-    }
 }
 
 /// One option of a `choice` node.
@@ -74,6 +65,31 @@ public struct CraftChoiceOption: Decodable, Equatable, Identifiable, Sendable {
 
     public init(id: String, label: String) {
         (self.id, self.label) = (id, label)
+    }
+}
+
+/// Something the user can do to one row (`ui::RowAction`): Close a document, Delete a layer. It
+/// shows in the row's context menu, and as a swipe action too when `destructive`; chosen, it sends
+/// an `action` edit with its `id`.
+public struct CraftRowAction: Decodable, Equatable, Identifiable, Sendable {
+    public let id: String
+    public let label: String
+    /// An SF Symbol name, or `nil` for none.
+    public let icon: String?
+    /// It destroys something: tinted red, and a trailing swipe action.
+    public let destructive: Bool
+
+    public init(id: String, label: String, icon: String? = nil, destructive: Bool = false) {
+        (self.id, self.label, self.icon, self.destructive) = (id, label, icon, destructive)
+    }
+
+    private enum Key: String, CodingKey { case id, label, icon, destructive }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: Key.self)
+        self = try CraftRowAction(
+            id: c.decode(String.self, forKey: .id), label: c.decode(String.self, forKey: .label),
+            icon: c.decodeIfPresent(String.self, forKey: .icon), destructive: c.decodeIfPresent(Bool.self, forKey: .destructive) ?? false)
     }
 }
 
@@ -87,9 +103,27 @@ public struct CraftRow: Decodable, Equatable, Identifiable, Sendable {
     /// `nil`: the row can't be hidden.
     public let visible: Bool?
     public let selected: Bool
+    /// What the user can do to the row, in menu order; none when the app leaves them out. One that
+    /// doesn't decode is skipped.
+    public let actions: [CraftRowAction]
 
-    public init(id: UInt64, title: String, subtitle: String = "", depth: UInt32 = 0, visible: Bool? = nil, selected: Bool = false) {
-        (self.id, self.title, self.subtitle, self.depth, self.visible, self.selected) = (id, title, subtitle, depth, visible, selected)
+    public init(
+        id: UInt64, title: String, subtitle: String = "", depth: UInt32 = 0, visible: Bool? = nil, selected: Bool = false,
+        actions: [CraftRowAction] = []
+    ) {
+        (self.id, self.title, self.subtitle, self.depth, self.visible, self.selected, self.actions) =
+            (id, title, subtitle, depth, visible, selected, actions)
+    }
+
+    private enum Key: String, CodingKey { case id, title, subtitle, depth, visible, selected, actions }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: Key.self)
+        self = try CraftRow(
+            id: c.decode(UInt64.self, forKey: .id), title: c.decode(String.self, forKey: .title),
+            subtitle: c.decode(String.self, forKey: .subtitle), depth: c.decode(UInt32.self, forKey: .depth),
+            visible: c.decodeIfPresent(Bool.self, forKey: .visible), selected: c.decode(Bool.self, forKey: .selected),
+            actions: (c.decodeIfPresent([Skippable<CraftRowAction>].self, forKey: .actions) ?? []).compactMap(\.value))
     }
 }
 

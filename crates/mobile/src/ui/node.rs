@@ -70,10 +70,11 @@ impl Panel {
     }
 
     /// Check the ids the shell relies on: controls are unique within the panel (sections
-    /// included) and rows are unique within their list.
+    /// included), rows are unique within their list, and actions within their row.
     ///
     /// # Errors
-    /// [`UiError::DuplicateControl`] or [`UiError::DuplicateRow`] for the first repeat found.
+    /// [`UiError::DuplicateControl`], [`UiError::DuplicateRow`] or [`UiError::DuplicateRowAction`]
+    /// for the first repeat found.
     pub fn check(&self) -> Result<(), UiError> {
         fn walk<'a>(panel: &PanelId, nodes: &'a [Node], seen: &mut HashSet<&'a ControlId>) -> Result<(), UiError> {
             for node in nodes {
@@ -94,6 +95,12 @@ impl Panel {
                         let mut rows = HashSet::new();
                         if let Some(dup) = l.rows.iter().find(|r| !rows.insert(r.id)) {
                             return Err(UiError::DuplicateRow { list: id.clone(), row: dup.id });
+                        }
+                        for row in &l.rows {
+                            let mut actions = HashSet::new();
+                            if let Some(dup) = row.actions.iter().find(|a| !actions.insert(&a.id)) {
+                                return Err(UiError::DuplicateRowAction { list: id.clone(), row: row.id, action: dup.id.clone() });
+                            }
                         }
                     }
                     Node::Number(_) | Node::Toggle(_) | Node::Choice(_) | Node::ToolPalette(_) => {}
@@ -380,6 +387,56 @@ number_id! {
     RowId
 }
 
+/// A row action's id, the app's own (`close`, `delete`), unique within its row.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct ActionId(String);
+
+id_newtype!(ActionId);
+
+/// Something the user can do to one row (Close a document, Delete a layer): the shell offers it in
+/// the row's context menu, and a destructive one as a swipe action too. Chosen, it sends
+/// [`super::EditValue::Action`].
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RowAction {
+    id: ActionId,
+    label: String,
+    /// An SF Symbol name; Android maps it to a Material icon.
+    #[serde(default)]
+    icon: Option<String>,
+    /// It destroys something (Close, Delete): the shell tints it red and offers it as a swipe.
+    #[serde(default)]
+    destructive: bool,
+}
+
+impl RowAction {
+    /// A plain action without an icon: `id` is what the edit carries, `label` what the user sees.
+    #[must_use]
+    pub fn new(id: impl Into<ActionId>, label: impl Into<String>) -> Self {
+        Self { id: id.into(), label: label.into(), icon: None, destructive: false }
+    }
+
+    /// An SF Symbol beside the label (`xmark`, `trash`).
+    #[must_use]
+    pub fn icon(mut self, symbol: Option<impl Into<String>>) -> Self {
+        self.icon = symbol.map(Into::into);
+        self
+    }
+
+    /// It destroys something: tinted red, and a swipe action too.
+    #[must_use]
+    pub fn destructive(mut self, destructive: bool) -> Self {
+        self.destructive = destructive;
+        self
+    }
+
+    /// Its id.
+    #[must_use]
+    pub fn id(&self) -> &ActionId {
+        &self.id
+    }
+}
+
 /// One row of an [`ItemList`].
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Row {
@@ -389,13 +446,16 @@ pub struct Row {
     depth: u32,
     visible: Option<bool>,
     selected: bool,
+    /// Left out of the JSON when there are none; missing means none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    actions: Vec<RowAction>,
 }
 
 impl Row {
     /// A top-level, unselected row that can't be hidden. `id` is the app's own (a layer id).
     #[must_use]
     pub fn new(id: impl Into<RowId>, title: impl Into<String>) -> Self {
-        Self { id: id.into(), title: title.into(), subtitle: String::new(), depth: 0, visible: None, selected: false }
+        Self { id: id.into(), title: title.into(), subtitle: String::new(), depth: 0, visible: None, selected: false, actions: Vec::new() }
     }
 
     /// A second line ("Pixel", "Group").
@@ -423,6 +483,13 @@ impl Row {
     #[must_use]
     pub fn selected(mut self, selected: bool) -> Self {
         self.selected = selected;
+        self
+    }
+
+    /// What the user can do to the row, in menu order ([`RowAction`]); ids unique in the row.
+    #[must_use]
+    pub fn actions(mut self, actions: Vec<RowAction>) -> Self {
+        self.actions = actions;
         self
     }
 }
@@ -555,6 +622,38 @@ mod tests {
         assert_eq!(dup.check().unwrap_err(), UiError::DuplicateControl { panel: PanelId::from("p"), control: ControlId::from("t") });
     }
 
+    /// A row's actions are on the wire as listed; a row without any leaves them out, and one from an
+    /// older app (no `actions`) has none.
+    #[test]
+    fn row_actions_serialize_and_default_to_none() {
+        let row = Row::new(3, "a.psd")
+            .actions(vec![RowAction::new("close", "Close").icon(Some("xmark")).destructive(true), RowAction::new("duplicate", "Duplicate")]);
+        assert_eq!(
+            serde_json::to_value(&row).unwrap()["actions"],
+            json!([
+                {"id": "close", "label": "Close", "icon": "xmark", "destructive": true},
+                {"id": "duplicate", "label": "Duplicate", "icon": null, "destructive": false}
+            ])
+        );
+        assert!(serde_json::to_value(Row::new(3, "a")).unwrap().get("actions").is_none(), "none, left out");
+        let old: Row =
+            serde_json::from_value(json!({"id": 3, "title": "a", "subtitle": "", "depth": 0, "visible": null, "selected": false})).unwrap();
+        assert_eq!(old, Row::new(3, "a"));
+        let partial: Row = serde_json::from_value(
+            json!({"id": 3, "title": "a", "subtitle": "", "depth": 0, "visible": null, "selected": false, "actions": [{"id": "close", "label": "Close"}]}),
+        )
+        .unwrap();
+        assert_eq!(partial, Row::new(3, "a").actions(vec![RowAction::new("close", "Close")]), "icon and destructive are optional");
+        assert_eq!(RowAction::new("close", "Close").id().as_str(), "close");
+    }
+
+    #[test]
+    fn check_finds_duplicate_row_actions() {
+        let twice = vec![RowAction::new("close", "Close"), RowAction::new("close", "Close Again")];
+        let panel = Panel::new("p", "P", PanelRole::Inspector, vec![Node::ItemList(ItemList::new("l", vec![Row::new(1, "a").actions(twice)]))]);
+        assert_eq!(panel.check().unwrap_err(), UiError::DuplicateRowAction { list: "l".into(), row: 1.into(), action: "close".into() });
+    }
+
     #[test]
     fn nodes_round_trip() {
         let panel = Panel::new(
@@ -564,7 +663,17 @@ mod tests {
             vec![
                 Node::Section(Section::new("props", "Layer", vec![Node::Toggle(Toggle::new("visible", "Visible", true))])),
                 Node::ItemList(
-                    ItemList::new("rows", vec![Row::new(7, "Background").subtitle("Pixel").visible(Some(true)).selected(true)]).reorderable(true),
+                    ItemList::new(
+                        "rows",
+                        vec![
+                            Row::new(7, "Background")
+                                .subtitle("Pixel")
+                                .visible(Some(true))
+                                .selected(true)
+                                .actions(vec![RowAction::new("delete", "Delete").icon(Some("trash")).destructive(true)]),
+                        ],
+                    )
+                    .reorderable(true),
                 ),
             ],
         );

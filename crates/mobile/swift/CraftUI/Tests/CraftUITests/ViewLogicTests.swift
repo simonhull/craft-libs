@@ -165,6 +165,16 @@ import Testing
         #expect(CraftItemListView.selectMode(multiSelecting: false, modifiers: .option) == .replace)
     }
 
+    /// Only destructive actions are swipes, in the app's order; every action is in the context menu.
+    @Test func destructiveRowActionsAreSwipes() {
+        let close = CraftRowAction(id: "close", label: "Close", icon: "xmark", destructive: true)
+        let dup = CraftRowAction(id: "duplicate", label: "Duplicate")
+        let delete = CraftRowAction(id: "delete", label: "Delete", destructive: true)
+        let row = CraftRow(id: 1, title: "a", actions: [close, dup, delete])
+        #expect(CraftItemListView.swipeActions(row) == [close, delete])
+        #expect(CraftItemListView.swipeActions(CraftRow(id: 2, title: "b")).isEmpty)
+    }
+
     @Test func nodesWithTheSameIdStillGetTheirOwnViews() {
         let nodes: [CraftNode] = [
             .toggle(id: "a", label: "A", value: true, enabled: true), .unknown(type: "hologram"),

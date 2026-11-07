@@ -93,7 +93,8 @@ pub use command::{CommandId, Shortcut, named_keys};
 pub use edit::{Edit, EditError, EditValue, GestureId, Message, Phase, Position, SelectMode};
 pub use menu::{Menu, MenuBar, MenuCommand, MenuEntry, MenuRole, Submenu};
 pub use node::{
-    Choice, ChoiceOption, ControlId, ItemList, Node, Number, Panel, PanelId, PanelInfo, PanelRole, Row, RowId, Scale, Section, Toggle, Unit,
+    ActionId, Choice, ChoiceOption, ControlId, ItemList, Node, Number, Panel, PanelId, PanelInfo, PanelRole, Row, RowAction, RowId, Scale, Section,
+    Toggle, Unit,
 };
 pub(crate) use publish::PanelsState;
 use publish::Published;
@@ -147,6 +148,16 @@ pub enum UiError {
         list: ControlId,
         /// The repeated row id.
         row: RowId,
+    },
+    /// Two actions of a row share an id.
+    #[error("list `{list}`: row {row} has action `{action}` twice")]
+    DuplicateRowAction {
+        /// The list control.
+        list: ControlId,
+        /// The row.
+        row: RowId,
+        /// The repeated action id.
+        action: ActionId,
     },
     /// A shortcut that isn't in the portable form (`Cmd+Shift+Z`).
     #[error("`{shortcut}` isn't a shortcut: modifiers (Ctrl, Cmd, Alt, Shift), then one key, joined by `+`")]
