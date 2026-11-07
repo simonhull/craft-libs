@@ -37,6 +37,32 @@ import UIKit
         }
     }
 
+    /// The comparison must catch a one-value change: the Layers panel with Opacity at 50 % instead
+    /// of 80 %, or with one row renamed (text alone, a few hundred pixels), is not its reference.
+    @available(iOS, deprecated: 26, message: "Renders in a scene-less window")
+    @Test func aChangedValueIsReported() throws {
+        let opacity = Fixtures.layers.nodes.map { node -> CraftNode in
+            guard case let .number(id, label, _, min, max, step, unit, enabled) = node, id == "opacity" else { return node }
+            return .number(id: id, label: label, value: 0.5, min: min, max: max, step: step, unit: unit, enabled: enabled)
+        }
+        let renamed = Fixtures.layers.nodes.map { node -> CraftNode in
+            guard case let .itemList(id, rows, reorderable) = node else { return node }
+            let renamedRows = rows.map { $0.id == 2 ? CraftRow(id: 2, title: "Sea", subtitle: $0.subtitle, depth: $0.depth, visible: $0.visible, selected: $0.selected) : $0 }
+            return .itemList(id: id, rows: renamedRows, reorderable: reorderable)
+        }
+        let v = try #require(Self.variants.first)
+        let url = Self.dir.appending(path: "layers-\(v.name)-\(Self.runtime).png")
+        let reference = try #require(Bitmap(png: try Data(contentsOf: url)))
+        for nodes in [opacity, renamed] {
+            let changed = CraftPanel(id: "layers", title: "Layers", role: .inspector, nodes: nodes)
+            let view = NavigationStack { CraftPanelView(panel: changed, send: { _ in }) }.dynamicTypeSize(v.type)
+            let actual = try #require(Bitmap(png: try Self.render(view, style: v.style, size: CGSize(width: 375, height: v.height))))
+            let differing = actual.compare(with: reference, tolerance: Self.channelTolerance).differing
+            print("CHANGED \(differing) px")
+            #expect(differing > Self.pixelTolerance, "a changed value must not pass as noise (\(differing) px)")
+        }
+    }
+
     // MARK: Rendering
 
     /// `ImageRenderer` doesn't draw `Form` (a UIKit collection view), and a test bundle without a host
@@ -73,9 +99,10 @@ import UIKit
 
     // MARK: Comparing
 
-    /// At most this share of pixels may differ, each by more than `channelTolerance`: antialiasing
-    /// and text rendering wobble slightly between machines; a real change moves far more.
-    static let pixelTolerance = 0.005
+    /// At most this many pixels may differ, each by more than `channelTolerance`. Two renders on one
+    /// runtime match exactly (0 px, measured); this allows a little antialiasing wobble between
+    /// machines, far below what one changed value moves (see `aChangedValueIsReported`).
+    static let pixelTolerance = 50
     static let channelTolerance: UInt8 = 2
 
     static func check(_ png: Data, _ name: String) throws {
@@ -95,11 +122,11 @@ import UIKit
             return
         }
         let (differing, diff) = actual.compare(with: reference, tolerance: channelTolerance)
-        let share = Double(differing) / Double(actual.width * actual.height)
-        if share > pixelTolerance {
+        if differing > pixelTolerance {
+            let share = Double(differing) / Double(actual.width * actual.height)
             Attachment.record(png, named: "\(name)-actual.png")
             if let diff { Attachment.record(diff, named: "\(name)-diff.png") }
-            Issue.record("\(name) changed (\((share * 100).formatted(.number.precision(.fractionLength(2)))) % of pixels): rerun with TEST_RUNNER_RECORD_SNAPSHOTS=1 if intended, and look at the image")
+            Issue.record("\(name) changed (\(differing) px, \((share * 100).formatted(.number.precision(.fractionLength(3)))) %): rerun with TEST_RUNNER_RECORD_SNAPSHOTS=1 if intended, and look at the image")
         }
     }
 }
