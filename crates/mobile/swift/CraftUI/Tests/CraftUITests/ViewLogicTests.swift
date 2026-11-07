@@ -34,6 +34,27 @@ import Testing
         #expect(CraftNumberView.parse("12.5", unit: .none, locale: Self.posix) == 12.5)
     }
 
+    static let de = Locale(identifier: "de_DE")
+    static let en = Locale(identifier: "en_US")
+
+    @Test func typedValuesParseStrictlyInTheUsersLocale() {
+        #expect(CraftNumberView.parse("1,5", unit: .none, locale: Self.de) == 1.5)
+        #expect(CraftNumberView.parse("1.234,5", unit: .none, locale: Self.de) == 1234.5)
+        #expect(CraftNumberView.parse("1,234", unit: .none, locale: Self.en) == 1234)
+        #expect(CraftNumberView.parse("−3,5", unit: .none, locale: Locale(identifier: "sv_SE")) == -3.5, "the locale's own minus sign")
+    }
+
+    @Test func aPlainDecimalPointStillWorksWhereTheLocaleGroupsWithIt() {
+        #expect(CraftNumberView.parse("1.5", unit: .none, locale: Self.de) == 1.5)
+        #expect(CraftNumberView.parse("0.25", unit: .none, locale: Self.de) == 0.25, "not 25")
+    }
+
+    @Test func anythingElseIsRejected() {
+        #expect(CraftNumberView.parse("0,5", unit: .none, locale: Self.en) == nil, "not 5, not 0.5: ambiguous")
+        #expect(CraftNumberView.parse("50abc", unit: .none, locale: Self.en) == nil)
+        #expect(CraftNumberView.parse("1,5", unit: .none, locale: Self.en) == nil, "not 1")
+    }
+
     @Test func typedUnitsAreIgnored() {
         #expect(CraftNumberView.parse("80 %", unit: .percent, locale: Self.posix) == 0.8)
         #expect(CraftNumberView.parse("24px", unit: .pixels, locale: Self.posix) == 24)

@@ -96,7 +96,8 @@ struct CraftNumberView: View {
         .alert(label, isPresented: $typing) {
             TextField(label, text: $typed)
             #if os(iOS)
-                .keyboardType(.decimalPad)
+                // The decimal pad has no minus key.
+                .keyboardType(range.lowerBound < 0 ? .numbersAndPunctuation : .decimalPad)
             #endif
             Button("Cancel", role: .cancel) {}
             Button("Set") { typedValue() }
@@ -142,16 +143,24 @@ struct CraftNumberView: View {
         }
     }
 
-    /// A typed value: read in `locale` (then as plain `1234.5`), ignoring a typed unit; a percentage
-    /// becomes 0...1. `nil` if it isn't a finite number.
+    /// A typed value: read strictly in `locale` (grouping only where the locale puts it), else as a
+    /// plain `1234.5`, ignoring a typed unit; a percentage becomes 0...1. `nil` for anything else
+    /// ("50abc", or "0,5" where a comma only groups), rather than a guess the user didn't mean.
     nonisolated static func parse(_ text: String, unit: CraftNode.Unit, locale: Locale = .current) -> Double? {
         let bare = ["%", "px", "°"]
             .reduce(text) { $0.replacingOccurrences(of: $1, with: "") }
             .trimmingCharacters(in: .whitespaces)
-        guard !bare.isEmpty,
-              let n = (try? Double(bare, format: .number.locale(locale))) ?? Double(bare),
-              n.isFinite else { return nil }
+        guard !bare.isEmpty, let n = strict(bare, locale: locale) ?? Double(bare), n.isFinite else { return nil }
         return unit == .percent ? n / 100 : n
+    }
+
+    /// `text` as a whole number in `locale`, its grouping in the right places, or `nil`.
+    private nonisolated static func strict(_ text: String, locale: Locale) -> Double? {
+        let formatter = NumberFormatter()
+        formatter.locale = locale
+        formatter.numberStyle = .decimal
+        formatter.isLenient = false
+        return formatter.number(from: text)?.doubleValue
     }
 }
 
