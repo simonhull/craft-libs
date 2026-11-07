@@ -93,6 +93,11 @@ public final class CraftBridge {
     /// Whether the app has described its panels since the shell last said which are on screen:
     /// until then a shown panel without a description is still coming; after, it isn't.
     private(set) var describedSinceShowing = false
+    /// A panel the app asked to open (wire kind 14), until the shell has opened it (or found it
+    /// isn't offered) and cleared it with ``openRequestHandled()``.
+    private(set) var openRequest: CraftOpenPanelRequest?
+    /// How many open requests have arrived, so asking for the same panel twice is two requests.
+    private var openRequests: UInt64 = 0
     /// The panels the shell shows, sorted: said again when the canvas starts, so the app describes
     /// them even if the shell said it before the app was running.
     private var shownPanels: [String] = []
@@ -170,6 +175,11 @@ public final class CraftBridge {
         shownPanels = ids.sorted()
         describedSinceShowing = false
         sayShowing()
+    }
+
+    /// The shell dealt with ``openRequest``.
+    func openRequestHandled() {
+        openRequest = nil
     }
 
     /// The canvas started the app: tell it which panels are on screen, in case the shell said so
@@ -427,10 +437,20 @@ public final class CraftBridge {
             } catch {
                 craftLog.error("native panels didn't decode, kept the last ones: \(error, privacy: .public)")
             }
+        case 14:
+            openRequests += 1
+            openRequest = CraftOpenPanelRequest(id: text, serial: openRequests)
         default:
             break
         }
     }
+}
+
+/// The app asked the shell to open one of its panels (`Platform::open_panel`). `serial` tells two
+/// requests for the same panel apart.
+struct CraftOpenPanelRequest: Equatable {
+    let id: String
+    let serial: UInt64
 }
 
 /// Background time from UIKit, held at most once. Expiry ends it.

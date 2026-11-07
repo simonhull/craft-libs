@@ -8,6 +8,8 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::OnceLock;
 
+use crate::ui::PanelId;
+
 /// Where the app keeps its own data (recovery files, settings), set once by the shell before the
 /// app starts: Application Support on iOS, `filesDir` on Android.
 static DATA_DIR: OnceLock<PathBuf> = OnceLock::new();
@@ -190,6 +192,9 @@ pub(crate) enum Request {
     /// arrived here: an edit the app rejects is answered with these values again, and a shell
     /// that sent an edit for that would loop.
     Panels(String),
+    /// Open this native panel as the user would from its toolbar button (the app's own menu
+    /// asked for it). A one-shot: never repeated to a shell that starts listening later.
+    OpenPanel(PanelId),
 }
 
 impl Request {
@@ -211,11 +216,16 @@ impl Request {
     /// | 11   | share         | file name                      | the file |
     /// | 12   | pick photos   | —                              | —        |
     /// | 13   | native panels | the panels as JSON (`ui`)      | —        |
+    /// | 14   | open a panel  | the panel's id                 | —        |
     ///
     /// Kind 10 is answered with the clipboard's contents (`craft_paste_*`, `CraftNative.paste*`),
     /// text first while a text field is focused, else an image first; an image the app copied
     /// itself and that is still there comes back as `craft_paste_own`, unread; an empty
     /// clipboard as empty text.
+    ///
+    /// For kind 14 the shell opens the panel in its role's place (an inspector beside the canvas,
+    /// a tool's popover), if the app offers it and the shell shows native panels; it ignores any
+    /// other id. Unlike kinds 3 and 13, it isn't sent again to a shell that starts listening later.
     ///
     /// For kind 8 the shell answers with the location and an error or none (`craft_write_done`,
     /// `CraftNative.writeDone`). The name never holds a line break, so it follows the last one.
@@ -234,6 +244,7 @@ impl Request {
             Request::Share { name, bytes } => (11, name.as_str().into(), Some(bytes)),
             Request::PickPhotos => (12, "".into(), None),
             Request::Panels(json) => (13, json.as_str().into(), None),
+            Request::OpenPanel(id) => (14, id.as_str().into(), None),
         }
     }
 }
@@ -349,6 +360,15 @@ impl Platform {
 
     pub(crate) fn set_pasted(&self, pasted: Option<Pasted>) {
         self.shared.borrow_mut().pasted = pasted.map(Rc::new);
+    }
+
+    /// Ask the shell to open one of the app's native panels ([`crate::ui::PanelInfo`]), as if the
+    /// user tapped its toolbar button: for the app's own way in to a panel the shell now shows
+    /// natively (a menu item, a rail icon). The shell opens it in its role's place and then
+    /// describes it as usual; an id the app doesn't offer, or a shell without native panels,
+    /// opens nothing. Nothing reports back.
+    pub fn open_panel(&self, id: impl Into<PanelId>) {
+        self.push(Request::OpenPanel(id.into()));
     }
 
     /// Open a link in the system browser (or the app that handles it).
@@ -506,6 +526,15 @@ mod tests {
         platform.panels("{}".into());
         let wired: Vec<_> = platform.take_requests().iter().map(|r| r.wire()).map(|(k, t, d)| (k, t.into_owned(), d.is_none())).collect();
         assert_eq!(wired, [(13, "{}".to_owned(), true)]);
+    }
+
+    #[test]
+    fn opening_a_panel_goes_out_as_kind_14_with_its_id() {
+        let platform = Platform::default();
+        platform.open_panel("layers");
+        platform.open_panel(crate::ui::PanelId::from("brush"));
+        let wired: Vec<_> = platform.take_requests().iter().map(|r| r.wire()).map(|(k, t, d)| (k, t.into_owned(), d.is_none())).collect();
+        assert_eq!(wired, [(14, "layers".to_owned(), true), (14, "brush".to_owned(), true)]);
     }
 
     #[test]

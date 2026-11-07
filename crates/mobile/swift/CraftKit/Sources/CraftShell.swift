@@ -36,7 +36,8 @@ public struct CraftShell: View {
     ///   - chrome: native toolbar and items inspector over the canvas. Off by default: an app that
     ///     draws its own menus and panels would show everything twice.
     ///   - nativePanels: the app's native panels, each a toolbar button: an inspector beside the
-    ///     canvas or a tool popover. Off by default, like `chrome`; the app hides its own versions.
+    ///     canvas or a tool popover. Off by default, like `chrome`; the app hides its own versions,
+    ///     and its own ways in to them (a menu item) can open the native one (`Platform::open_panel`).
     public init(documentTypes: [UTType], drawing: CraftDrawingInput = .anyTouch, colorSpace: CraftColorSpace = .sRGB, pencil: CraftPencilActions = CraftPencilActions(), chrome: Bool = false, nativePanels: Bool = false) {
         self.chrome = chrome
         self.nativePanels = nativePanels
@@ -76,6 +77,7 @@ public struct CraftShell: View {
             .background {
                 if nativePanels {
                     CraftPanelCloser(bridge: bridge, inspector: $inspector, inspectorShown: $inspectorShown, popover: $popover)
+                    CraftPanelOpener(bridge: bridge, inspector: $inspector, inspectorShown: $inspectorShown, popover: $popover)
                 }
             }
             .fileImporter(

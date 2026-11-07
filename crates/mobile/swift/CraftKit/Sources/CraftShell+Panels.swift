@@ -91,6 +91,40 @@ struct CraftPanelCloser: View {
     }
 }
 
+/// Opens a panel the app asked for (wire kind 14) as its toolbar button would: an inspector in the
+/// column (another gives way), a tool in its popover. Opening it changes the panels on screen, so
+/// the app hears of it and describes it as usual. An id the app doesn't offer opens nothing. Draws
+/// nothing.
+struct CraftPanelOpener: View {
+    let bridge: CraftBridge
+    @Binding var inspector: CraftInspector
+    @Binding var inspectorShown: Bool
+    @Binding var popover: String?
+
+    var body: some View {
+        Color.clear
+            .frame(width: 0, height: 0)
+            .accessibilityHidden(true)
+            .onChange(of: bridge.openRequest, initial: true) { _, request in
+                guard let request else { return }
+                bridge.openRequestHandled()
+                guard let info = bridge.panels.panels.first(where: { $0.id == request.id }) else {
+                    craftLog.debug("the app asked to open panel \(request.id, privacy: .public), which it doesn't offer")
+                    return
+                }
+                withAnimation {
+                    switch info.role {
+                    case .inspector:
+                        inspector = .panel(info.id)
+                        inspectorShown = true
+                    case .tool:
+                        popover = info.id
+                    }
+                }
+            }
+    }
+}
+
 /// A toolbar button: an SF Symbol, 44 pt square.
 struct CraftToolButton: View {
     let label: String

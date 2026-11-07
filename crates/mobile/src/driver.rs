@@ -472,6 +472,21 @@ mod tests {
         assert_eq!(shell.heard(), ["state {}", r#"Panels("{\"panels\":[]}")"#]);
     }
 
+    /// Opening a panel is a one-shot: a shell that starts listening later must not open it again.
+    #[test]
+    fn an_open_panel_request_reaches_the_shell_once_and_is_not_replayed() {
+        let mut driver = TestDriver::default();
+        attach(&mut driver);
+        let first = FakeShell::default();
+        driver.handle(Message::Shell(Some(first.clone())));
+        SEEN.with(|s| s.borrow_mut().requests = vec![Request::Panels("{}".into()), Request::OpenPanel("layers".into())]);
+        driver.frame();
+        assert_eq!(first.heard(), [r#"Panels("{}")"#, r#"OpenPanel(PanelId("layers"))"#]);
+        let late = FakeShell::default();
+        driver.handle(Message::Shell(Some(late.clone())));
+        assert_eq!(late.heard(), [r#"Panels("{}")"#], "the panels again, not the open request");
+    }
+
     #[test]
     fn native_panel_messages_reach_the_app_in_order() {
         let mut driver = TestDriver::default();

@@ -149,6 +149,13 @@ fn wire_markdown() -> String {
          button.\n\n",
     );
     let _ = write!(s, "```json\n{}\n```\n", serde_json::to_string_pretty(&published).unwrap_or_default());
+    s.push_str(
+        "\nThe app can also ask the shell to open one of its panels (request kind 14, the panel's \
+         `id` as text; `Platform::open_panel`), for its own way in to a panel the shell now shows \
+         natively, such as a menu item. The shell opens it in its role's place, as its toolbar \
+         button would, and then says which panels are on screen (`open_panels`, below) as usual; an id the app doesn't offer opens \
+         nothing. Unlike the panels, it isn't sent again to a shell that starts listening later.\n",
+    );
     let _ = write!(
         s,
         "\nThe shell sends messages through the same call as its actions (`craft_action`, `CraftNative.action`). It says which panels are on screen, and gets them all again:\n\n```json\n{}\n```\n",
