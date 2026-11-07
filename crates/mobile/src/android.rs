@@ -569,8 +569,8 @@ pub extern "system" fn Java_dev_craft_kit_CraftNative_pickDone(_env: JNIEnv<'_>,
     post(Message::PickDone);
 }
 
-/// `CraftNative.action(json)`: a native control was used; an [`Action`] as JSON. Returns false
-/// when it isn't one.
+/// `CraftNative.action(json)`: a native control was used; an [`Action`] or a native panel's
+/// [`crate::ui::Message`] as JSON. Returns false when it is neither.
 #[expect(unsafe_code, reason = "exported to Kotlin")]
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_dev_craft_kit_CraftNative_action(mut env: JNIEnv<'_>, _class: JClass<'_>, json: JString<'_>) -> jboolean {
@@ -581,6 +581,9 @@ pub extern "system" fn Java_dev_craft_kit_CraftNative_action(mut env: JNIEnv<'_>
             return JNI_FALSE;
         }
     };
+    if let Ok(message) = serde_json::from_str::<crate::ui::Message>(&json) {
+        return jboolean(post(Message::Ui(message)));
+    }
     match serde_json::from_str::<Action>(&json) {
         Ok(action) => jboolean(post(Message::Action(action))),
         Err(e) => {

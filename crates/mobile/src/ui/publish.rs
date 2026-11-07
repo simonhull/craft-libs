@@ -28,6 +28,12 @@ impl PanelsState {
         self.sent = None;
     }
 
+    /// Send everything again with the next [`publish`](Self::publish), changed or not: an edit
+    /// was rejected, and the shell's controls must show the app's values again.
+    pub(crate) fn resend(&mut self) {
+        self.sent = None;
+    }
+
     /// Describe the open panels; the JSON to send if anything changed since the last call.
     ///
     /// A panel described under another id than asked for is dropped; one with duplicate ids is
@@ -114,6 +120,17 @@ mod tests {
             ))
         };
         assert!(s.publish(info(), twice).unwrap().contains("\"t\""));
+    }
+
+    #[test]
+    fn a_resend_sends_the_unchanged_panels_again() {
+        let mut s = PanelsState::default();
+        s.open(vec!["a".into()]);
+        let first = s.publish(info(), describe(false));
+        assert_eq!(s.publish(info(), describe(false)), None);
+        s.resend();
+        assert_eq!(s.publish(info(), describe(false)), first);
+        assert_eq!(s.publish(info(), describe(false)), None);
     }
 
     #[test]

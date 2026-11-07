@@ -182,6 +182,8 @@ pub(crate) enum Request {
     Share { name: String, bytes: Vec<u8> },
     /// Show the system photo picker; the chosen photos open as copies ([`crate::CraftApp::open_file`]).
     PickPhotos,
+    /// The native panels and the open ones' contents (JSON, [`crate::ui`]).
+    Panels(String),
 }
 
 impl Request {
@@ -202,6 +204,7 @@ impl Request {
     /// | 10   | paste         | —                              | —        |
     /// | 11   | share         | file name                      | the file |
     /// | 12   | pick photos   | —                              | —        |
+    /// | 13   | native panels | the panels as JSON ([`crate::ui`]) | —    |
     ///
     /// Kind 10 is answered with the clipboard's contents (`craft_paste_*`, `CraftNative.paste*`),
     /// text first while a text field is focused, else an image first; an image the app copied
@@ -224,6 +227,7 @@ impl Request {
             Request::Paste => (10, "".into(), None),
             Request::Share { name, bytes } => (11, name.as_str().into(), Some(bytes)),
             Request::PickPhotos => (12, "".into(), None),
+            Request::Panels(json) => (13, json.as_str().into(), None),
         }
     }
 }
@@ -360,6 +364,10 @@ impl Platform {
         self.shared.borrow_mut().out.push(Request::State(json));
     }
 
+    pub(crate) fn panels(&self, json: String) {
+        self.shared.borrow_mut().out.push(Request::Panels(json));
+    }
+
     /// Note a file that arrived with a location, so saves to its document path write it back.
     pub(crate) fn remember(&self, file: &PickedFile) {
         if let (Some(location), Some(path)) = (&file.location, file.document_path()) {
@@ -484,6 +492,14 @@ mod tests {
         assert!(platform.writing());
         platform.finish_write(&Location("loc-a".into()));
         assert!(!platform.writing());
+    }
+
+    #[test]
+    fn panels_go_out_as_kind_13() {
+        let platform = Platform::default();
+        platform.panels("{}".into());
+        let wired: Vec<_> = platform.take_requests().iter().map(|r| r.wire()).map(|(k, t, d)| (k, t.into_owned(), d.is_none())).collect();
+        assert_eq!(wired, [(13, "{}".to_owned(), true)]);
     }
 
     #[test]

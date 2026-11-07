@@ -23,7 +23,7 @@ use crate::{Action, CraftApp, Input, PickedFile, Stylus, session};
 /// | 3    | panel state    | a `Snapshot` as JSON         | —              |
 ///
 /// and the rest as [`Request::wire`] lists them (8: write in place, answered with
-/// [`craft_write_done`]; 9: busy, `1` or `0`).
+/// [`craft_write_done`]; 9: busy, `1` or `0`; 13: native panels, JSON).
 pub type Handler = extern "C" fn(context: *mut c_void, kind: u32, text: *const u8, text_len: usize, data: *const u8, data_len: usize);
 
 struct Shell {
@@ -174,7 +174,8 @@ pub extern "C" fn craft_pick_done() {
     session::with(|h| h.answer_pick(files));
 }
 
-/// A native control was used: an [`Action`] as JSON. Returns false when it isn't one.
+/// A native control was used: an [`Action`] or a native panel's [`crate::ui::Message`] as JSON.
+/// Returns false when it is neither.
 ///
 /// # Safety
 /// `json` must point at `len` readable bytes (or be null with length 0) during the call.
@@ -183,6 +184,9 @@ pub extern "C" fn craft_pick_done() {
 pub unsafe extern "C" fn craft_action(json: *const u8, len: usize) -> bool {
     // SAFETY: the caller's contract, passed on.
     let bytes = unsafe { bytes(json, len) };
+    if let Ok(message) = serde_json::from_slice::<crate::ui::Message>(bytes) {
+        return session::with(|h| h.ui(message)).is_some();
+    }
     match serde_json::from_slice::<Action>(bytes) {
         Ok(action) => session::with(|h| h.action(action)).is_some(),
         Err(e) => {

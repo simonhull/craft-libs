@@ -13,6 +13,9 @@
 //! - **Commands:** native controls send an [`Action`]; the app maps it to its own commands.
 //! - **Panel state:** the app describes what native panels show as a [`Snapshot`]; the shell gets
 //!   it again whenever it changes.
+//! - **Native panels:** the app describes whole panels in [`ui`] primitives
+//!   ([`CraftApp::panels`], [`CraftApp::describe`]); the shell draws them natively and sends
+//!   changes back as [`ui::Edit`]s ([`CraftApp::apply`]).
 //!
 //! An app implements [`CraftApp`] and calls [`export!`] once.
 
@@ -87,6 +90,28 @@ pub trait CraftApp: eframe::App + 'static {
     /// What the native panels show. Called after every frame; the shell hears of it when it
     /// changes, so keep it cheap and deterministic.
     fn snapshot(&self) -> Snapshot;
+
+    /// The native panels this app offers. None by default: the app's own egui UI is the whole UI.
+    fn panels(&self) -> Vec<ui::PanelInfo> {
+        Vec::new()
+    }
+
+    /// One panel's contents, built from [`ui`] primitives; `None` for an id it doesn't offer.
+    /// Called after every frame for the panels on screen, so keep it cheap and deterministic.
+    fn describe(&self, panel: &ui::PanelId) -> Option<ui::Panel> {
+        let _ = panel;
+        None
+    }
+
+    /// A control in a native panel changed. Runs inside the frame, before `logic`. On `Err` the
+    /// panel is described and sent again, so the control shows the app's value.
+    ///
+    /// # Errors
+    /// Why the edit could not apply.
+    fn apply(&mut self, ctx: &egui::Context, edit: &ui::Edit) -> Result<(), String> {
+        let _ = (ctx, edit);
+        Err("this app has no native panels".into())
+    }
 
     /// The app is leaving the screen and the OS may terminate it without warning: start writing
     /// recovery data for unsaved work now, on workers, and return at once. The shells call this

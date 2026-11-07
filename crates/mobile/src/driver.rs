@@ -57,6 +57,8 @@ pub(crate) enum Message<W, S> {
     /// The open picker closed: answer it with the files added since it opened.
     PickDone,
     Action(Action),
+    /// A native panel's control changed, or the shell's open panels did.
+    Ui(crate::ui::Message),
     /// Keys, text, clipboard, trackpad, stylus and life-cycle signals.
     Input(Input),
     /// Answer on `done` once everything posted before has been handled (the shell waits for the
@@ -77,6 +79,8 @@ pub(crate) struct Driver<W, S> {
     early: Vec<PickedFile>,
     /// The last panel state, for a shell that starts listening later.
     state: Option<String>,
+    /// The last native panels, for a shell that starts listening later.
+    panels: Option<String>,
     /// Whether the app last said it was busy: then it runs without a window too.
     busy: bool,
     /// The device's last power state, for an app that starts after the shell reported it.
@@ -85,7 +89,7 @@ pub(crate) struct Driver<W, S> {
 
 impl<W, S> Default for Driver<W, S> {
     fn default() -> Self {
-        Self { window: None, shell: None, picked: Vec::new(), early: Vec::new(), state: None, busy: false, power: None }
+        Self { window: None, shell: None, picked: Vec::new(), early: Vec::new(), state: None, panels: None, busy: false, power: None }
     }
 }
 
@@ -123,13 +127,19 @@ impl<W: Window, S: Shell> Driver<W, S> {
                 self.window = None;
                 self.picked.clear();
                 self.state = None;
+                self.panels = None;
                 self.busy = false;
             }
             Message::Shell(shell) => {
                 self.shell = shell;
                 // A shell that starts listening later still sees the panels.
-                if let (Some(shell), Some(json)) = (&mut self.shell, &self.state) {
-                    shell.deliver(&Request::State(json.clone()));
+                if let Some(shell) = &mut self.shell {
+                    if let Some(json) = &self.state {
+                        shell.deliver(&Request::State(json.clone()));
+                    }
+                    if let Some(json) = &self.panels {
+                        shell.deliver(&Request::Panels(json.clone()));
+                    }
                 }
             }
             Message::Touch(touch) => {
@@ -147,6 +157,9 @@ impl<W: Window, S: Shell> Driver<W, S> {
             }
             Message::Action(action) => {
                 session::with(|h| h.action(action));
+            }
+            Message::Ui(message) => {
+                session::with(|h| h.ui(message));
             }
             Message::Input(input) => {
                 if let Input::Power(power) = input {
@@ -200,6 +213,7 @@ impl<W: Window, S: Shell> Driver<W, S> {
         for request in &requests {
             match request {
                 Request::State(json) => self.state = Some(json.clone()),
+                Request::Panels(json) => self.panels = Some(json.clone()),
                 Request::Busy(busy) => self.busy = *busy,
                 _ => {}
             }
@@ -289,6 +303,9 @@ mod tests {
         }
         fn action(&mut self, action: Action) {
             note(format!("action {action:?}"));
+        }
+        fn ui(&mut self, message: crate::ui::Message) {
+            note(format!("ui {message:?}"));
         }
         fn answer_pick(&mut self, files: Vec<PickedFile>) {
             note(format!("picked {}", files.iter().map(|f| f.name.as_str()).collect::<Vec<_>>().join(",")));
@@ -448,6 +465,26 @@ mod tests {
         SEEN.with(|s| s.borrow_mut().requests = vec![Request::Export { name: "a.psd".into(), bytes: vec![] }]);
         driver.frame();
         assert_eq!(shell.heard(), ["state {}", "export a.psd"]);
+    }
+
+    #[test]
+    fn a_late_shell_still_sees_the_native_panels() {
+        let mut driver = TestDriver::default();
+        attach(&mut driver);
+        SEEN.with(|s| s.borrow_mut().requests = vec![Request::State("{}".into()), Request::Panels(r#"{"panels":[]}"#.into())]);
+        driver.frame();
+        let shell = FakeShell::default();
+        driver.handle(Message::Shell(Some(shell.clone())));
+        assert_eq!(shell.heard(), ["state {}", r#"Panels("{\"panels\":[]}")"#]);
+    }
+
+    #[test]
+    fn native_panel_messages_reach_the_app_in_order() {
+        let mut driver = TestDriver::default();
+        attach(&mut driver);
+        driver.handle(Message::Ui(crate::ui::Message::OpenPanels { open: vec!["layers".into()] }));
+        driver.handle(Message::Action(Action::Undo));
+        assert_eq!(seen(), ["make", r#"ui OpenPanels { open: [PanelId("layers")] }"#, "action Undo"]);
     }
 
     /// What the shell sends reaches the running app in the order it was sent: a native

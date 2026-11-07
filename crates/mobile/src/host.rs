@@ -15,7 +15,7 @@ use egui::{Event, Pos2, RawInput, TouchDeviceId, TouchId, TouchPhase, ViewportId
 use crate::input::{Input, hover_event, key_events, scroll_events, secondary_click_events};
 use crate::platform::{Pasted, Platform, Request, WriteOutcome};
 use crate::pointer::TouchPointer;
-use crate::{Action, CraftApp, PickedFile, Snapshot};
+use crate::{Action, CraftApp, PickedFile, Snapshot, ui};
 
 /// Why the host could not start.
 #[derive(Debug, thiserror::Error)]
@@ -76,6 +76,8 @@ pub(crate) trait HostOps {
     fn frame(&mut self) -> bool;
     fn open_file(&mut self, file: PickedFile);
     fn action(&mut self, action: Action);
+    /// A native panel's control changed, or the shell's open panels did.
+    fn ui(&mut self, message: ui::Message);
     fn answer_pick(&mut self, files: Vec<PickedFile>);
     fn take_requests(&mut self) -> Vec<Request>;
     /// Keys, text, clipboard, trackpad, stylus and life-cycle signals.
@@ -120,6 +122,10 @@ pub(crate) struct Host<A> {
     events: Vec<Event>,
     /// Native controls used since the last frame; they run inside the next one.
     actions: Vec<Action>,
+    /// Native panel edits since the last frame; they run inside the next one, after the actions.
+    edits: Vec<ui::Edit>,
+    /// Which native panels are open, and what the shell last heard of them.
+    panels: ui::PanelsState,
     /// Which touch drives egui's pointer, a finger's press held back until it isn't a gesture.
     pointer: TouchPointer,
     /// When egui next wants a frame; worker threads move it earlier through the repaint callback.
@@ -217,6 +223,8 @@ impl<A: CraftApp> Host<A> {
             started: Instant::now(),
             events: Vec::new(),
             actions: Vec::new(),
+            edits: Vec::new(),
+            panels: ui::PanelsState::default(),
             pointer: TouchPointer::default(),
             next_frame,
             shown: None,
@@ -294,7 +302,7 @@ impl<A: CraftApp> Host<A> {
     }
 
     /// Tell the shell when the panels' state changed.
-    fn publish(&mut self) {
+    fn publish_snapshot(&mut self) {
         let snapshot = self.app.snapshot();
         if self.shown.as_ref() == Some(&snapshot) {
             return;
@@ -304,6 +312,19 @@ impl<A: CraftApp> Host<A> {
             Err(e) => log::error!("craft-mobile: panel state: {e}"),
         }
         self.shown = Some(snapshot);
+    }
+
+    /// Tell the shell when the native panels, or the open ones' contents, changed.
+    fn publish_panels(&mut self) {
+        let app = &self.app;
+        if let Some(json) = self.panels.publish(app.panels(), |id| app.describe(id)) {
+            self.platform.panels(json);
+        }
+    }
+
+    /// Whether native controls wait for a frame to run in.
+    fn controls_wait(&self) -> bool {
+        !(self.actions.is_empty() && self.edits.is_empty())
     }
 
     fn wake(&self) {
@@ -336,7 +357,7 @@ impl<A: CraftApp> HostOps for Host<A> {
     /// Run one frame if one is due: drawn when the host has a view on screen, else only while the
     /// app is busy or a native control waits, without drawing. Otherwise input waits for the next view.
     fn frame(&mut self) -> bool {
-        match FrameKind::of(self.surface.is_some(), self.on_screen, self.busy || !self.actions.is_empty()) {
+        match FrameKind::of(self.surface.is_some(), self.on_screen, self.busy || self.controls_wait()) {
             FrameKind::Draw => {
                 let surface = self.surface.take();
                 let drew = self.frame_into(surface.as_ref());
@@ -384,6 +405,14 @@ impl<A: CraftApp> HostOps for Host<A> {
 
     fn action(&mut self, action: Action) {
         self.actions.push(action);
+        self.wake();
+    }
+
+    fn ui(&mut self, message: ui::Message) {
+        match message {
+            ui::Message::Edit(edit) => self.edits.push(edit),
+            ui::Message::OpenPanels { open } => self.panels.open(open),
+        }
         self.wake();
     }
 
@@ -469,7 +498,7 @@ impl<A: CraftApp> Host<A> {
         // A finger whose hold ran out without a second finger presses now.
         let held = self.pointer.tick(now);
         self.events.extend(held);
-        let idle = self.events.is_empty() && self.actions.is_empty();
+        let idle = self.events.is_empty() && !self.controls_wait();
         if idle && now < *self.next_frame.lock().unwrap_or_else(PoisonError::into_inner) {
             return false;
         }
@@ -480,11 +509,19 @@ impl<A: CraftApp> Host<A> {
         self.app.raw_input_hook(&self.ctx, &mut raw);
         let ran = Instant::now();
         let actions = std::mem::take(&mut self.actions);
+        let edits = std::mem::take(&mut self.edits);
+        let mut rejected = false;
         let (app, frame) = (&mut self.app, &mut self.frame);
         let output = self.ctx.run_ui(raw, |ui| {
             for action in &actions {
                 if let Err(e) = app.action(ui.ctx(), action) {
                     log::warn!("craft-mobile: {action:?}: {e}");
+                }
+            }
+            for edit in &edits {
+                if let Err(e) = app.apply(ui.ctx(), edit) {
+                    log::warn!("craft-mobile: {edit:?}: {e}");
+                    rejected = true;
                 }
             }
             app.logic(ui.ctx(), frame);
@@ -510,7 +547,12 @@ impl<A: CraftApp> Host<A> {
             }
             None => self.pending_textures = textures,
         }
-        self.publish();
+        if rejected {
+            // The shell shows the app's values again, even where nothing changed.
+            self.panels.resend();
+        }
+        self.publish_snapshot();
+        self.publish_panels();
         self.publish_busy();
         true
     }
