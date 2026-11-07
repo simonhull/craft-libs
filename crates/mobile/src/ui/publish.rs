@@ -8,9 +8,9 @@ use super::{Panel, PanelId, PanelInfo};
 
 /// What the shell gets (wire kind 13): every panel the app offers, and the open ones described.
 #[derive(Debug, PartialEq, Serialize)]
-struct Published {
-    panels: Vec<PanelInfo>,
-    open: BTreeMap<PanelId, Panel>,
+pub(super) struct Published {
+    pub(super) panels: Vec<PanelInfo>,
+    pub(super) open: BTreeMap<PanelId, Panel>,
 }
 
 /// The open panels and what was last sent.
@@ -25,7 +25,7 @@ impl PanelsState {
     /// next [`publish`](Self::publish) sends everything again.
     pub(crate) fn open(&mut self, open: Vec<PanelId>) {
         self.open = open;
-        self.sent = None;
+        self.resend();
     }
 
     /// Send everything again with the next [`publish`](Self::publish), changed or not: an edit
@@ -37,30 +37,39 @@ impl PanelsState {
     /// Describe the open panels; the JSON to send if anything changed since the last call.
     ///
     /// A panel described under another id than asked for is dropped; one with duplicate ids is
-    /// still published, with a warning.
+    /// still published. Either is logged when what is sent changes, not every frame.
     pub(crate) fn publish(&mut self, panels: Vec<PanelInfo>, describe: impl Fn(&PanelId) -> Option<Panel>) -> Option<String> {
+        let (now, problems) = self.describe(panels, describe);
+        if self.sent.as_ref() == Some(&now) {
+            return None;
+        }
+        for problem in &problems {
+            log::warn!("craft-mobile: panels: {problem}");
+        }
+        let json = serde_json::to_string(&now).map_err(|e| log::error!("craft-mobile: panels: {e}")).ok();
+        self.sent = Some(now);
+        json
+    }
+
+    /// What to publish now, and what is wrong with it.
+    fn describe(&self, panels: Vec<PanelInfo>, describe: impl Fn(&PanelId) -> Option<Panel>) -> (Published, Vec<String>) {
+        let mut problems = Vec::new();
         let open = self
             .open
             .iter()
             .filter_map(|id| {
                 let panel = describe(id)?;
                 if panel.id() != id {
-                    log::warn!("craft-mobile: panels: asked for `{id}`, got `{}`; dropped", panel.id());
+                    problems.push(format!("asked for `{id}`, got `{}`; dropped", panel.id()));
                     return None;
                 }
                 if let Err(e) = panel.check() {
-                    log::warn!("craft-mobile: panels: {e}");
+                    problems.push(e.to_string());
                 }
                 Some((id.clone(), panel))
             })
             .collect();
-        let now = Published { panels, open };
-        if self.sent.as_ref() == Some(&now) {
-            return None;
-        }
-        let json = serde_json::to_string(&now).map_err(|e| log::error!("craft-mobile: panels: {e}")).ok();
-        self.sent = Some(now);
-        json
+        (Published { panels, open }, problems)
     }
 }
 
@@ -120,6 +129,24 @@ mod tests {
             ))
         };
         assert!(s.publish(info(), twice).unwrap().contains("\"t\""));
+    }
+
+    #[test]
+    fn problems_are_found_for_the_log() {
+        let mut s = PanelsState::default();
+        s.open(vec!["a".into()]);
+        let twice = |_: &PanelId| {
+            Some(Panel::new(
+                "a",
+                "A",
+                PanelRole::Inspector,
+                vec![Node::Toggle(Toggle::new("t", "T", true)), Node::Toggle(Toggle::new("t", "T", true))],
+            ))
+        };
+        let (_, problems) = s.describe(info(), twice);
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        let (_, problems) = s.describe(info(), |_| Some(Panel::new("other", "O", PanelRole::Inspector, vec![])));
+        assert!(problems.first().is_some_and(|p| p.contains("other")), "{problems:?}");
     }
 
     #[test]

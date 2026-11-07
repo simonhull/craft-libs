@@ -22,6 +22,7 @@
 // Only the native shells (iOS, Android) drive the host; elsewhere just the unit tests build it.
 #![cfg_attr(not(any(target_os = "ios", target_os = "android")), expect(dead_code, reason = "the host is driven by the iOS and Android shells only"))]
 
+mod control;
 #[cfg(any(target_os = "android", test))]
 mod driver;
 pub mod host;

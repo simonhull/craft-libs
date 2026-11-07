@@ -9,9 +9,10 @@ use std::ffi::c_void;
 use eframe::wgpu;
 use egui::{Modifiers, Pos2};
 
+use crate::control::Control;
 use crate::host::{Host, ViewSize};
 use crate::platform::Request;
-use crate::{Action, CraftApp, Input, PickedFile, Stylus, session};
+use crate::{CraftApp, Input, PickedFile, Stylus, session};
 
 /// What the shell is asked to do. `text` and `data` are only valid during the call: copy them.
 ///
@@ -174,7 +175,7 @@ pub extern "C" fn craft_pick_done() {
     session::with(|h| h.answer_pick(files));
 }
 
-/// A native control was used: an [`Action`] or a native panel's [`crate::ui::Message`] as JSON.
+/// A native control was used: an [`crate::Action`] or a native panel's [`crate::ui::Message`] as JSON.
 /// Returns false when it is neither.
 ///
 /// # Safety
@@ -184,13 +185,10 @@ pub extern "C" fn craft_pick_done() {
 pub unsafe extern "C" fn craft_action(json: *const u8, len: usize) -> bool {
     // SAFETY: the caller's contract, passed on.
     let bytes = unsafe { bytes(json, len) };
-    if let Ok(message) = serde_json::from_slice::<crate::ui::Message>(bytes) {
-        return session::with(|h| h.ui(message)).is_some();
-    }
-    match serde_json::from_slice::<Action>(bytes) {
-        Ok(action) => session::with(|h| h.action(action)).is_some(),
+    match Control::parse(bytes) {
+        Ok(control) => session::with(|h| h.control(control)).is_some(),
         Err(e) => {
-            log::warn!("craft-mobile: not an action: {e}");
+            log::warn!("craft-mobile: not a control: {e}");
             false
         }
     }

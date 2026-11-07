@@ -16,6 +16,17 @@
         "step": null,
         "unit": "percent",
         "enabled": true
+      },
+      "edit": {
+        "action": "edit",
+        "panel": "layers",
+        "control": "opacity",
+        "phase": "change",
+        "gesture": 7,
+        "value": {
+          "kind": "number",
+          "value": 0.5
+        }
       }
     },
     {
@@ -29,6 +40,17 @@
         "label": "Visible",
         "value": true,
         "enabled": true
+      },
+      "edit": {
+        "action": "edit",
+        "panel": "layers",
+        "control": "visible",
+        "phase": "commit",
+        "gesture": 8,
+        "value": {
+          "kind": "toggle",
+          "value": false
+        }
       }
     },
     {
@@ -56,6 +78,17 @@
           }
         ],
         "enabled": true
+      },
+      "edit": {
+        "action": "edit",
+        "panel": "layers",
+        "control": "blend",
+        "phase": "commit",
+        "gesture": 9,
+        "value": {
+          "kind": "choice",
+          "value": "multiply"
+        }
       }
     },
     {
@@ -77,7 +110,8 @@
             "enabled": true
           }
         ]
-      }
+      },
+      "edit": null
     },
     {
       "name": "item_list",
@@ -106,6 +140,21 @@
           }
         ],
         "reorderable": true
+      },
+      "edit": {
+        "action": "edit",
+        "panel": "layers",
+        "control": "layers",
+        "phase": "commit",
+        "gesture": 10,
+        "value": {
+          "kind": "move",
+          "value": {
+            "row": 1,
+            "target": 2,
+            "position": "above"
+          }
+        }
       }
     }
   ]

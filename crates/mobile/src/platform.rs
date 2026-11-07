@@ -182,7 +182,13 @@ pub(crate) enum Request {
     Share { name: String, bytes: Vec<u8> },
     /// Show the system photo picker; the chosen photos open as copies ([`crate::CraftApp::open_file`]).
     PickPhotos,
-    /// The native panels and the open ones' contents (JSON, [`crate::ui`]).
+    /// The native panels and the open ones' contents (JSON, [`crate::ui`]):
+    /// `{"panels": [PanelInfo…], "open": {id: Panel…}}`, sent whenever it changes and again
+    /// after a rejected edit.
+    ///
+    /// Shells send edits only for the user's own gestures, never while showing a value that
+    /// arrived here: an edit the app rejects is answered with these values again, and a shell
+    /// that sent an edit for that would loop.
     Panels(String),
 }
 
@@ -204,7 +210,7 @@ impl Request {
     /// | 10   | paste         | —                              | —        |
     /// | 11   | share         | file name                      | the file |
     /// | 12   | pick photos   | —                              | —        |
-    /// | 13   | native panels | the panels as JSON ([`crate::ui`]) | —    |
+    /// | 13   | native panels | the panels as JSON (`ui`)      | —        |
     ///
     /// Kind 10 is answered with the clipboard's contents (`craft_paste_*`, `CraftNative.paste*`),
     /// text first while a text field is focused, else an image first; an image the app copied

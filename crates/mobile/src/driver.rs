@@ -10,9 +10,10 @@ use std::sync::mpsc::SyncSender;
 
 use eframe::wgpu;
 
+use crate::control::Control;
 use crate::host::{HostError, HostOps, Touch, ViewSize};
 use crate::platform::Request;
-use crate::{Action, Input, PickedFile, Power, session};
+use crate::{Input, PickedFile, Power, session};
 
 /// A native window the host can draw into, kept alive by whoever holds this value.
 pub(crate) trait Window: Send + 'static {
@@ -56,9 +57,8 @@ pub(crate) enum Message<W, S> {
     PickAdd(PickedFile),
     /// The open picker closed: answer it with the files added since it opened.
     PickDone,
-    Action(Action),
-    /// A native panel's control changed, or the shell's open panels did.
-    Ui(crate::ui::Message),
+    /// A native control was used, or the shell's open panels changed.
+    Control(Control),
     /// Keys, text, clipboard, trackpad, stylus and life-cycle signals.
     Input(Input),
     /// Answer on `done` once everything posted before has been handled (the shell waits for the
@@ -155,11 +155,8 @@ impl<W: Window, S: Shell> Driver<W, S> {
                 let files = std::mem::take(&mut self.picked);
                 session::with(|h| h.answer_pick(files));
             }
-            Message::Action(action) => {
-                session::with(|h| h.action(action));
-            }
-            Message::Ui(message) => {
-                session::with(|h| h.ui(message));
+            Message::Control(control) => {
+                session::with(|h| h.control(control));
             }
             Message::Input(input) => {
                 if let Input::Power(power) = input {
@@ -301,11 +298,8 @@ mod tests {
         fn open_file(&mut self, file: PickedFile) {
             note(format!("open {}", file.name));
         }
-        fn action(&mut self, action: Action) {
-            note(format!("action {action:?}"));
-        }
-        fn ui(&mut self, message: crate::ui::Message) {
-            note(format!("ui {message:?}"));
+        fn control(&mut self, control: Control) {
+            note(format!("{control:?}"));
         }
         fn answer_pick(&mut self, files: Vec<PickedFile>) {
             note(format!("picked {}", files.iter().map(|f| f.name.as_str()).collect::<Vec<_>>().join(",")));
@@ -482,9 +476,9 @@ mod tests {
     fn native_panel_messages_reach_the_app_in_order() {
         let mut driver = TestDriver::default();
         attach(&mut driver);
-        driver.handle(Message::Ui(crate::ui::Message::OpenPanels { open: vec!["layers".into()] }));
-        driver.handle(Message::Action(Action::Undo));
-        assert_eq!(seen(), ["make", r#"ui OpenPanels { open: [PanelId("layers")] }"#, "action Undo"]);
+        driver.handle(Message::Control(Control::Ui(crate::ui::Message::OpenPanels { open: vec!["layers".into()] })));
+        driver.handle(Message::Control(Control::Action(crate::Action::Undo)));
+        assert_eq!(seen(), ["make", r#"Ui(OpenPanels { open: [PanelId("layers")] })"#, "Action(Undo)"]);
     }
 
     /// What the shell sends reaches the running app in the order it was sent: a native
@@ -493,13 +487,13 @@ mod tests {
     fn the_shells_calls_reach_the_app_in_order() {
         let mut driver = TestDriver::default();
         attach(&mut driver);
-        driver.handle(Message::Action(Action::Save));
+        driver.handle(Message::Control(Control::Action(crate::Action::Save)));
         driver.handle(Message::Resize(size(1024)));
         let location = crate::Location::new("content://docs/1").map(|location| Input::WriteDone { location, result: Err("read-only".into()) });
         driver.handle(Message::Input(location.unwrap_or(Input::Resume)));
         assert_eq!(
             seen(),
-            ["make", "action Save", "resize 1024", r#"input WriteDone { location: Location("content://docs/1"), result: Err("read-only") }"#]
+            ["make", "Action(Save)", "resize 1024", r#"input WriteDone { location: Location("content://docs/1"), result: Err("read-only") }"#]
         );
     }
 

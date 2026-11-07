@@ -12,10 +12,11 @@ use eframe::egui_wgpu::{self, RenderState, RendererOptions, ScreenDescriptor, Wg
 use eframe::wgpu;
 use egui::{Event, Pos2, RawInput, TouchDeviceId, TouchId, TouchPhase, ViewportId};
 
+use crate::control::Control;
 use crate::input::{Input, hover_event, key_events, scroll_events, secondary_click_events};
 use crate::platform::{Pasted, Platform, Request, WriteOutcome};
 use crate::pointer::TouchPointer;
-use crate::{Action, CraftApp, PickedFile, Snapshot, ui};
+use crate::{CraftApp, PickedFile, Snapshot, ui};
 
 /// Why the host could not start.
 #[derive(Debug, thiserror::Error)]
@@ -75,9 +76,8 @@ pub(crate) trait HostOps {
     fn touch(&mut self, touch: Touch);
     fn frame(&mut self) -> bool;
     fn open_file(&mut self, file: PickedFile);
-    fn action(&mut self, action: Action);
-    /// A native panel's control changed, or the shell's open panels did.
-    fn ui(&mut self, message: ui::Message);
+    /// A native control was used, or the shell's open panels changed.
+    fn control(&mut self, control: Control);
     fn answer_pick(&mut self, files: Vec<PickedFile>);
     fn take_requests(&mut self) -> Vec<Request>;
     /// Keys, text, clipboard, trackpad, stylus and life-cycle signals.
@@ -120,10 +120,9 @@ pub(crate) struct Host<A> {
     started: Instant,
     /// Input gathered since the last frame.
     events: Vec<Event>,
-    /// Native controls used since the last frame; they run inside the next one.
-    actions: Vec<Action>,
-    /// Native panel edits since the last frame; they run inside the next one, after the actions.
-    edits: Vec<ui::Edit>,
+    /// Native controls used since the last frame (actions and panel edits); they run inside
+    /// the next one, in the order they came.
+    controls: Vec<Control>,
     /// Which native panels are open, and what the shell last heard of them.
     panels: ui::PanelsState,
     /// Which touch drives egui's pointer, a finger's press held back until it isn't a gesture.
@@ -222,8 +221,7 @@ impl<A: CraftApp> Host<A> {
             size,
             started: Instant::now(),
             events: Vec::new(),
-            actions: Vec::new(),
-            edits: Vec::new(),
+            controls: Vec::new(),
             panels: ui::PanelsState::default(),
             pointer: TouchPointer::default(),
             next_frame,
@@ -322,11 +320,6 @@ impl<A: CraftApp> Host<A> {
         }
     }
 
-    /// Whether native controls wait for a frame to run in.
-    fn controls_wait(&self) -> bool {
-        !(self.actions.is_empty() && self.edits.is_empty())
-    }
-
     fn wake(&self) {
         *self.next_frame.lock().unwrap_or_else(PoisonError::into_inner) = Instant::now();
     }
@@ -357,7 +350,7 @@ impl<A: CraftApp> HostOps for Host<A> {
     /// Run one frame if one is due: drawn when the host has a view on screen, else only while the
     /// app is busy or a native control waits, without drawing. Otherwise input waits for the next view.
     fn frame(&mut self) -> bool {
-        match FrameKind::of(self.surface.is_some(), self.on_screen, self.busy || self.controls_wait()) {
+        match FrameKind::of(self.surface.is_some(), self.on_screen, self.busy || !self.controls.is_empty()) {
             FrameKind::Draw => {
                 let surface = self.surface.take();
                 let drew = self.frame_into(surface.as_ref());
@@ -403,15 +396,11 @@ impl<A: CraftApp> HostOps for Host<A> {
         self.wake();
     }
 
-    fn action(&mut self, action: Action) {
-        self.actions.push(action);
-        self.wake();
-    }
-
-    fn ui(&mut self, message: ui::Message) {
-        match message {
-            ui::Message::Edit(edit) => self.edits.push(edit),
-            ui::Message::OpenPanels { open } => self.panels.open(open),
+    fn control(&mut self, control: Control) {
+        match control {
+            // Only the shell's state, nothing for the app to run: the next frame describes them.
+            Control::Ui(ui::Message::OpenPanels { open }) => self.panels.open(open),
+            control => self.controls.push(control),
         }
         self.wake();
     }
@@ -484,6 +473,35 @@ impl<A: CraftApp> HostOps for Host<A> {
     }
 }
 
+/// Run native controls in the order the shell sent them (a toggle, then Undo, undoes the
+/// toggle). Returns whether the app rejected a panel edit.
+fn run_controls<A: CraftApp>(app: &mut A, ctx: &egui::Context, controls: &[Control]) -> bool {
+    let mut rejected = false;
+    for control in controls {
+        match control {
+            Control::Action(action) => {
+                if let Err(e) = app.action(ctx, action) {
+                    log::warn!("craft-mobile: {action:?}: {e}");
+                }
+            }
+            Control::Ui(ui::Message::Edit(edit)) => {
+                if let Err(e) = app.apply(ctx, edit) {
+                    rejected = true;
+                    // A drag sends many changes; its commit says it once.
+                    if edit.phase == ui::Phase::Change {
+                        log::debug!("craft-mobile: {edit:?}: {e}");
+                    } else {
+                        log::warn!("craft-mobile: {edit:?}: {e}");
+                    }
+                }
+            }
+            // Handled as it arrives (`HostOps::control`).
+            Control::Ui(ui::Message::OpenPanels { .. }) => {}
+        }
+    }
+    rejected
+}
+
 /// An RGBA8 buffer as an egui image, when its length matches its size.
 fn color_image(width: u32, height: u32, rgba: &[u8]) -> Option<egui::ColorImage> {
     let (w, h) = (usize::try_from(width).ok()?, usize::try_from(height).ok()?);
@@ -491,14 +509,14 @@ fn color_image(width: u32, height: u32, rgba: &[u8]) -> Option<egui::ColorImage>
 }
 
 impl<A: CraftApp> Host<A> {
-    /// Run one frame if one is due (input or an action arrived, or egui asked), drawing into
+    /// Run one frame if one is due (input or a native control arrived, or egui asked), drawing into
     /// `surface` when there is one. Returns whether it ran.
     fn frame_into(&mut self, surface: Option<&wgpu::Surface<'static>>) -> bool {
         let now = Instant::now();
         // A finger whose hold ran out without a second finger presses now.
         let held = self.pointer.tick(now);
         self.events.extend(held);
-        let idle = self.events.is_empty() && !self.controls_wait();
+        let idle = self.events.is_empty() && self.controls.is_empty();
         if idle && now < *self.next_frame.lock().unwrap_or_else(PoisonError::into_inner) {
             return false;
         }
@@ -508,22 +526,11 @@ impl<A: CraftApp> Host<A> {
         let mut raw = self.raw_input();
         self.app.raw_input_hook(&self.ctx, &mut raw);
         let ran = Instant::now();
-        let actions = std::mem::take(&mut self.actions);
-        let edits = std::mem::take(&mut self.edits);
+        let controls = std::mem::take(&mut self.controls);
         let mut rejected = false;
         let (app, frame) = (&mut self.app, &mut self.frame);
         let output = self.ctx.run_ui(raw, |ui| {
-            for action in &actions {
-                if let Err(e) = app.action(ui.ctx(), action) {
-                    log::warn!("craft-mobile: {action:?}: {e}");
-                }
-            }
-            for edit in &edits {
-                if let Err(e) = app.apply(ui.ctx(), edit) {
-                    log::warn!("craft-mobile: {edit:?}: {e}");
-                    rejected = true;
-                }
-            }
+            rejected = run_controls(app, ui.ctx(), &controls);
             app.logic(ui.ctx(), frame);
             app.ui(ui, frame);
         });
@@ -664,6 +671,58 @@ mod tests {
         assert_eq!(FrameKind::of(false, true, true), FrameKind::Tick, "no view (Android, after surfaceDestroyed)");
         assert_eq!(FrameKind::of(true, false, false), FrameKind::Skip);
         assert_eq!(FrameKind::of(false, true, false), FrameKind::Skip);
+    }
+
+    /// Records what reached it; rejects edits to `bad`.
+    struct FakeApp(Vec<String>);
+
+    impl eframe::App for FakeApp {
+        fn ui(&mut self, _ui: &mut egui::Ui, _frame: &mut eframe::Frame) {}
+    }
+
+    impl CraftApp for FakeApp {
+        fn create(_ctx: &egui::Context, _wgpu: Option<RenderState>, _platform: Platform) -> Self {
+            Self(Vec::new())
+        }
+        fn open_file(&mut self, _ctx: &egui::Context, _file: PickedFile) {}
+        fn action(&mut self, _ctx: &egui::Context, action: &crate::Action) -> Result<(), String> {
+            self.0.push(format!("{action:?}"));
+            Ok(())
+        }
+        fn snapshot(&self) -> Snapshot {
+            Snapshot::default()
+        }
+        fn apply(&mut self, _ctx: &egui::Context, edit: &ui::Edit) -> Result<(), String> {
+            self.0.push(format!("apply {}", edit.control));
+            if edit.control.as_str() == "bad" { Err("no".into()) } else { Ok(()) }
+        }
+    }
+
+    fn edit(control: &str) -> Control {
+        Control::Ui(ui::Message::Edit(ui::Edit {
+            panel: "p".into(),
+            control: control.into(),
+            phase: ui::Phase::Commit,
+            gesture: 1,
+            value: ui::EditValue::Toggle(true),
+        }))
+    }
+
+    /// A toggle then Undo in one frame undoes the toggle, not whatever came before it.
+    #[test]
+    fn controls_run_in_the_order_they_came() {
+        let mut app = FakeApp(Vec::new());
+        let ctx = egui::Context::default();
+        let rejected = run_controls(&mut app, &ctx, &[edit("t"), Control::Action(crate::Action::Undo), edit("u")]);
+        assert_eq!(app.0, ["apply t", "Undo", "apply u"]);
+        assert!(!rejected);
+    }
+
+    #[test]
+    fn a_rejected_edit_is_reported() {
+        let mut app = FakeApp(Vec::new());
+        assert!(run_controls(&mut app, &egui::Context::default(), &[edit("bad"), edit("t")]));
+        assert_eq!(app.0, ["apply bad", "apply t"], "the rest still run");
     }
 
     #[test]

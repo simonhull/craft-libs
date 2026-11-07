@@ -21,10 +21,11 @@ use jni::{JNIEnv, JavaVM};
 use ndk::native_window::NativeWindow;
 use wgpu::rwh::{AndroidDisplayHandle, AndroidNdkWindowHandle, RawDisplayHandle, RawWindowHandle};
 
+use crate::control::Control;
 use crate::driver::{self, Driver, Message};
 use crate::host::{Host, HostError, HostOps, ViewSize};
 use crate::platform::Request;
-use crate::{Action, CraftApp, Input, Location, PickedFile, Stylus, keycodes};
+use crate::{CraftApp, Input, Location, PickedFile, Stylus, keycodes};
 
 #[doc(hidden)]
 pub use jni;
@@ -569,7 +570,7 @@ pub extern "system" fn Java_dev_craft_kit_CraftNative_pickDone(_env: JNIEnv<'_>,
     post(Message::PickDone);
 }
 
-/// `CraftNative.action(json)`: a native control was used; an [`Action`] or a native panel's
+/// `CraftNative.action(json)`: a native control was used; an [`crate::Action`] or a native panel's
 /// [`crate::ui::Message`] as JSON. Returns false when it is neither.
 #[expect(unsafe_code, reason = "exported to Kotlin")]
 #[unsafe(no_mangle)]
@@ -581,13 +582,10 @@ pub extern "system" fn Java_dev_craft_kit_CraftNative_action(mut env: JNIEnv<'_>
             return JNI_FALSE;
         }
     };
-    if let Ok(message) = serde_json::from_str::<crate::ui::Message>(&json) {
-        return jboolean(post(Message::Ui(message)));
-    }
-    match serde_json::from_str::<Action>(&json) {
-        Ok(action) => jboolean(post(Message::Action(action))),
+    match Control::parse(json.as_bytes()) {
+        Ok(control) => jboolean(post(Message::Control(control))),
         Err(e) => {
-            log::warn!("craft-mobile: not an action: {e}");
+            log::warn!("craft-mobile: not a control: {e}");
             JNI_FALSE
         }
     }
