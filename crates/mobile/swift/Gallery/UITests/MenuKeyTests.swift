@@ -1,8 +1,15 @@
 import XCTest
 
 /// Shortcuts on a hardware keyboard and the toolbar's menu, against the catalogue's menus. A
-/// first-responder view stands in for the canvas: it takes every key press with ⌘ or ⌃ and logs it,
-/// as CraftCanvas forwards presses to the app, so a shortcut that ran twice shows twice.
+/// first-responder view stands in for the canvas, with CraftCanvas's rules: an enabled menu item's
+/// key command goes on to the menu, which sends it as a `shortcut`; every other press it takes and
+/// logs. So a shortcut that ran twice, or not through the menu, shows.
+///
+/// XCUITest presses keys on the simulated device itself, so the Mac's Simulator app (whose own Edit
+/// menu would take ⌘Z when the window has focus) never sees them. ⌘Z works as any shortcut does,
+/// but the first ⌘Z after launch never reaches the app (no `pressesBegan`, no `pressesEnded`, no
+/// key command; measured: a second ⌘Z, or one after another key, arrives). So `launch()` first
+/// presses Shift alone, which the canvas ignores. Worth a look on an iPad with a Magic Keyboard.
 @MainActor
 final class MenuKeyTests: XCTestCase {
     private func launch() -> XCUIApplication {
@@ -10,6 +17,9 @@ final class MenuKeyTests: XCTestCase {
         app.launchArguments = ["-selection", "menu_bar"]
         app.launch()
         XCTAssertTrue(app.staticTexts["Choose a menu item, or press its keys."].waitForExistence(timeout: 10))
+        app.typeKey(XCUIKeyboardKey.shift.rawValue, modifierFlags: [])
+        sleep(1)
+        XCTAssertEqual(lines(app), [], "Shift alone reaches nothing")
         return app
     }
 
@@ -22,21 +32,41 @@ final class MenuKeyTests: XCTestCase {
         app.staticTexts.allElementsBoundByIndex.map { $0.label }.filter { $0.hasPrefix("{") || $0.hasPrefix("key reached") }
     }
 
-    /// ⌘R is View › Rulers' shortcut: the press reaches the canvas once, and the menu's key command
-    /// doesn't run it again (the first responder gets a press before key commands do).
-    func testAMenuShortcutRunsOnce() throws {
-        let app = launch()
-        app.typeKey("r", modifierFlags: .command)
+    private func press(_ app: XCUIApplication, _ key: String, _ flags: XCUIElement.KeyModifierFlags) -> [String] {
+        app.typeKey(key, modifierFlags: flags)
         sleep(1)
-        XCTAssertEqual(lines(app), ["key reached the canvas: ⌘r"])
+        return lines(app)
     }
 
-    /// A key no menu item has reaches the canvas the same way.
+    /// ⌘R is View › Rulers' key command: it reaches the menu, which sends it once, and the canvas
+    /// doesn't take it too.
+    func testAMenuShortcutRunsOnceThroughTheMenu() throws {
+        XCTAssertEqual(press(launch(), "r", .command), [#"{"action":"shortcut","keys":"Cmd+R"}"#])
+    }
+
+    /// ⌘Z is Edit › Undo's.
+    func testUndoRunsOnceThroughTheMenu() throws {
+        XCTAssertEqual(press(launch(), "z", .command), [#"{"action":"shortcut","keys":"Cmd+Z"}"#])
+    }
+
+    /// ⇧⌘Z is Redo's, which the catalogue disables: the key goes to the canvas, and the app decides.
+    func testADisabledItemsKeysGoToTheCanvas() throws {
+        XCTAssertEqual(press(launch(), "z", [.command, .shift]), ["key reached the canvas: ⇧⌘z"])
+    }
+
+    /// A key no menu item has reaches the canvas.
     func testOtherKeysReachTheCanvas() throws {
+        XCTAssertEqual(press(launch(), "k", .command), ["key reached the canvas: ⌘k"])
+    }
+
+    /// After typing in a native field and ending it, the canvas has the keyboard again and the menu's
+    /// shortcuts work.
+    func testShortcutsWorkAfterANativeField() throws {
         let app = launch()
-        app.typeKey("k", modifierFlags: .command)
-        sleep(1)
-        XCTAssertEqual(lines(app), ["key reached the canvas: ⌘k"])
+        let field = app.textFields["field"]
+        field.tap()
+        field.typeText("abc\n")
+        XCTAssertEqual(press(app, "r", .command), [#"{"action":"shortcut","keys":"Cmd+R"}"#])
     }
 
     /// The toolbar's menu holds the same tree: an item with a shortcut sends the shortcut, one

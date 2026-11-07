@@ -128,9 +128,11 @@ public final class CraftCanvasView: UIView, UIGestureRecognizerDelegate, UIPenci
     override public var canBecomeFirstResponder: Bool { true }
 
     /// The menu bar's items act here, after the canvas (and its text input, a subview) in the
-    /// responder chain; under SwiftUI the app delegate isn't in it. A shortcut's key press comes to
-    /// `pressesBegan` before any key command, and the canvas takes it for the app (⌘ and ⌃ presses
-    /// don't go on), so the menu's key command never runs it a second time.
+    /// responder chain; under SwiftUI the app delegate isn't in it. A key press comes to
+    /// `pressesBegan` before any key command: one that is an enabled item's key command goes on to
+    /// it (`CraftKeys.forward`), so the menu sends it to the app once, as a `shortcut`; the canvas
+    /// takes every other press for the app. The canvas takes first responder back whenever the user
+    /// turns to it (`takeKeys`), or the menu bar would stay dead after a native field.
     private let menuResponder = CraftMenuResponder()
     override public var next: UIResponder? { menuResponder.after(super.next) }
 
@@ -140,6 +142,24 @@ public final class CraftCanvasView: UIView, UIGestureRecognizerDelegate, UIPenci
 
     override public func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
         super.pressesEnded(CraftKeys.forward(presses, pressed: false), with: event)
+    }
+
+    /// Become first responder again (hardware keys reach the app, and the menu bar's items, which
+    /// act through `menuResponder`, work), unless the app's own text field has the keyboard. Called
+    /// whenever the user turns to the canvas: a touch, the Pencil, the pointer over it.
+    func takeKeys() {
+        guard !isFirstResponder, !textInput.isFirstResponder else { return }
+        becomeFirstResponder()
+    }
+
+    /// ``takeKeys()`` once a native field has ended editing, if no other responder took over.
+    private func takeKeysWhenFree() {
+        DispatchQueue.main.async { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.window != nil, CraftFirstResponder.current() == nil else { return }
+                self.takeKeys()
+            }
+        }
     }
 
     /// The app's text field gained (show) or lost focus: raise or drop the on-screen keyboard.
@@ -172,6 +192,7 @@ public final class CraftCanvasView: UIView, UIGestureRecognizerDelegate, UIPenci
 
     @objc private func hover(_ recognizer: UIHoverGestureRecognizer) {
         let at = recognizer.location(in: self)
+        if recognizer.state == .began { takeKeys() }
         switch recognizer.state {
         case .began, .changed: craft_hover(Float(at.x), Float(at.y), true)
         default: craft_hover(Float(at.x), Float(at.y), false)
@@ -262,6 +283,10 @@ public final class CraftCanvasView: UIView, UIGestureRecognizerDelegate, UIPenci
                 if view.started { craft_memory_warning() }
             },
             on(Notification.Name.NSProcessInfoPowerStateDidChange, nil) { $0.applyFrameRate() },
+            // A native field (a typed number, a rename) finished: the keyboard and the menu bar's
+            // items come back to the canvas, unless another field took over.
+            on(UITextField.textDidEndEditingNotification, nil) { $0.takeKeysWhenFree() },
+            on(UITextView.textDidEndEditingNotification, nil) { $0.takeKeysWhenFree() },
         ]
     }
 
@@ -372,7 +397,10 @@ public final class CraftCanvasView: UIView, UIGestureRecognizerDelegate, UIPenci
 
     // MARK: Touches
 
-    override public func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) { send(touches, event, phase: 0) }
+    override public func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        takeKeys()
+        send(touches, event, phase: 0)
+    }
     override public func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) { send(touches, event, phase: 1) }
     override public func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) { send(touches, event, phase: 2) }
     override public func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) { send(touches, event, phase: 3) }
@@ -470,10 +498,12 @@ public final class CraftCanvasView: UIView, UIGestureRecognizerDelegate, UIPenci
     }
 
     public func pencilInteraction(_ interaction: UIPencilInteraction, didReceiveTap tap: UIPencilInteraction.Tap) {
+        takeKeys()
         pencilDoubleTap()
     }
 
     public func pencilInteraction(_ interaction: UIPencilInteraction, didReceiveSqueeze squeeze: UIPencilInteraction.Squeeze) {
+        takeKeys()
         if squeeze.phase == .ended { pencilSqueeze() }
     }
 

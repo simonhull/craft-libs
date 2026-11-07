@@ -27,18 +27,29 @@ enum CraftKeys {
         0x4F: "ArrowRight", 0x50: "ArrowLeft", 0x51: "ArrowDown", 0x52: "ArrowUp",
     ]
 
+    /// A key press as a menu shortcut.
+    static func shortcut(_ name: String, _ flags: UIKeyModifierFlags) -> CraftShortcut {
+        CraftShortcut(key: name, ctrl: flags.contains(.control), cmd: flags.contains(.command), alt: flags.contains(.alternate), shift: flags.contains(.shift))
+    }
+
     /// craft-mobile's modifier bits: 1 shift, 2 control, 4 option, 8 command.
     static func bits(_ flags: UIKeyModifierFlags) -> UInt32 {
         (flags.contains(.shift) ? 1 : 0) | (flags.contains(.control) ? 2 : 0) | (flags.contains(.alternate) ? 4 : 0) | (flags.contains(.command) ? 8 : 0)
     }
 
     /// Forward hardware key presses. Returns the presses the app didn't take (for `super`).
-    /// Command-V pastes from the system clipboard instead of reaching the app as a key.
+    /// Command-V pastes from the system clipboard instead of reaching the app as a key. A press
+    /// that is an enabled menu item's key command goes on to it instead (``CraftMenus/claims(_:)``),
+    /// so the menu sends it to the app once, as a `shortcut`.
     @MainActor
     static func forward(_ presses: Set<UIPress>, pressed: Bool) -> Set<UIPress> {
         var rest: Set<UIPress> = []
         for press in presses {
             guard let key = press.key, let name = name(key.keyCode) else {
+                rest.insert(press)
+                continue
+            }
+            if CraftMenus.shared.claims(shortcut(name, key.modifierFlags)) {
                 rest.insert(press)
                 continue
             }

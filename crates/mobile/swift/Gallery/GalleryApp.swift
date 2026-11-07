@@ -110,11 +110,12 @@ struct GalleryDetail: View {
 
 /// The menu bar: the catalogue's menus in the iPad menu bar (pointer to the top edge, or hold ⌘)
 /// and the toolbar's menu button; what each sends, and every key press that reached the view
-/// standing in for the canvas (first responder, as CraftCanvas is), so a shortcut that also
-/// reached the canvas shows twice.
+/// standing in for the canvas (first responder, as CraftCanvas is), so a shortcut that ran twice
+/// shows twice. A native field takes the keyboard and gives it back, as a typed number does.
 struct GalleryMenuDetail: View {
     let about: String
     let store: GalleryStore
+    @State private var typed = ""
 
     var body: some View {
         List {
@@ -122,7 +123,13 @@ struct GalleryMenuDetail: View {
             Section("Canvas") {
                 GalleryKeyProbe { store.logLine("key reached the canvas: \($0)") }
                     .frame(height: 44)
-                    .overlay { Text("Stands in for the canvas: first responder, takes key presses").foregroundStyle(.secondary) }
+                    .overlay {
+                        Text("Stands in for the canvas: first responder, takes key presses").foregroundStyle(.secondary).allowsHitTesting(false)
+                    }
+            }
+            Section("A Native Field") {
+                // As a typed number or a rename takes the keyboard from the canvas, then gives it back.
+                TextField("Type here", text: $typed).accessibilityIdentifier("field")
             }
             Section("Sent") {
                 if store.log.isEmpty {
@@ -144,8 +151,9 @@ struct GalleryMenuDetail: View {
     }
 }
 
-/// A view that becomes first responder and logs the key presses that reach it, then passes them on,
-/// as CraftCanvas does.
+/// A view that becomes first responder and logs the key presses that reach it, as CraftCanvas does:
+/// the same menu responder after it, the same rule for which presses go on to the menu's key
+/// commands, and first responder taken back on a touch or when a native field ends editing.
 struct GalleryKeyProbe: UIViewRepresentable {
     let pressed: (String) -> Void
 
@@ -163,11 +171,30 @@ struct GalleryKeyProbe: UIViewRepresentable {
     final class Probe: UIView {
         var pressed: (String) -> Void = { _ in }
         private let menuResponder = CraftMenuResponder()
+        private var ended: NSObjectProtocol?
         override var canBecomeFirstResponder: Bool { true }
         override var next: UIResponder? { menuResponder.after(super.next) }
 
-        /// As CraftCanvas does (`CraftKeys.forward`): the app takes each key press, and only one that
-        /// types text goes on up the responder chain.
+        override init(frame: CGRect) {
+            super.init(frame: frame)
+            ended = NotificationCenter.default.addObserver(forName: UITextField.textDidEndEditingNotification, object: nil, queue: .main) { [weak self] _ in
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        if CraftFirstResponder.current() == nil { self?.becomeFirstResponder() }
+                    }
+                }
+            }
+        }
+
+        required init?(coder: NSCoder) { nil }
+
+        override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+            if !isFirstResponder { becomeFirstResponder() }
+            super.touchesBegan(touches, with: event)
+        }
+
+        /// The app takes each key press, except an enabled menu item's key command, which goes on to
+        /// the menu; of the rest, only one that types text goes on up the responder chain.
         override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
             var rest: Set<UIPress> = []
             for press in presses {
@@ -175,16 +202,19 @@ struct GalleryKeyProbe: UIViewRepresentable {
                     rest.insert(press)
                     continue
                 }
-                pressed("\(Self.describe(key.modifierFlags))\(key.charactersIgnoringModifiers)")
-                let shortcut = key.modifierFlags.contains(.command) || key.modifierFlags.contains(.control)
-                if !shortcut { rest.insert(press) }
+                let flags = key.modifierFlags
+                let shortcut = CraftShortcut(
+                    key: key.charactersIgnoringModifiers.uppercased(), ctrl: flags.contains(.control), cmd: flags.contains(.command),
+                    alt: flags.contains(.alternate), shift: flags.contains(.shift))
+                NSLog("Gallery canvas pressesBegan \(shortcut.text)")
+                if CraftMenus.shared.claims(shortcut) {
+                    rest.insert(press)
+                    continue
+                }
+                pressed(shortcut.glyphs.lowercased())
+                if !shortcut.hasCommandModifier { rest.insert(press) }
             }
             super.pressesBegan(rest, with: event)
-        }
-
-
-        static func describe(_ flags: UIKeyModifierFlags) -> String {
-            [(UIKeyModifierFlags.control, "⌃"), (.alternate, "⌥"), (.shift, "⇧"), (.command, "⌘")].filter { flags.contains($0.0) }.map(\.1).joined()
         }
     }
 }
