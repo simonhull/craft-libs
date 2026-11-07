@@ -4,61 +4,165 @@ import Testing
 import UIKit
 @testable import CraftUI
 
-/// Renders panels as the iPad shows them and compares with the PNGs in `Snapshots/`. A missing
-/// reference is recorded; `RECORD_SNAPSHOTS=1` re-records them all. Look at every image you record.
+/// Renders panels as the iPad shows them and compares them with the PNGs in `Snapshots/`, which are
+/// named for the iOS major version they were drawn on (another runtime draws differently, so it
+/// records its own). A missing reference is recorded and the test fails until it's committed;
+/// `TEST_RUNNER_RECORD_SNAPSHOTS=1 xcodebuild test …` re-records them all (and fails, likewise).
+/// Look at every image you record.
 @MainActor @Suite struct SnapshotTests {
     static let dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "Snapshots")
-    static let size = CGSize(width: 375, height: 720)
+    static let runtime = "ios\(ProcessInfo.processInfo.operatingSystemVersion.majorVersion)"
 
-    struct Variant { let name: String; let style: UIUserInterfaceStyle; let type: DynamicTypeSize }
+    struct Variant: Sendable {
+        let name: String
+        let style: UIUserInterfaceStyle
+        let type: DynamicTypeSize
+        let height: CGFloat
+    }
+
     static let variants = [
-        Variant(name: "light", style: .light, type: .large),
-        Variant(name: "dark", style: .dark, type: .large),
-        Variant(name: "light-xxxl", style: .light, type: .xxxLarge),
+        Variant(name: "light", style: .light, type: .large, height: 720),
+        Variant(name: "dark", style: .dark, type: .large, height: 720),
+        Variant(name: "light-xxxl", style: .light, type: .xxxLarge, height: 820),
+        Variant(name: "light-ax3", style: .light, type: .accessibility3, height: 1100),
     ]
 
+    @available(iOS, deprecated: 26, message: "Renders in a scene-less window")
     @Test(arguments: [Fixtures.layers, Fixtures.brush])
     func panel(_ panel: CraftPanel) throws {
         for v in Self.variants {
             let view = NavigationStack { CraftPanelView(panel: panel, send: { _ in }) }.dynamicTypeSize(v.type)
-            try Self.check(view, style: v.style, "\(panel.id)-\(v.name)")
+            let png = try Self.render(view, style: v.style, size: CGSize(width: 375, height: v.height))
+            try Self.check(png, "\(panel.id)-\(v.name)-\(Self.runtime)")
         }
     }
 
-    /// `ImageRenderer` doesn't draw `Form` (a UIKit collection view), and a test bundle without a host app
-    /// has no render server for `drawHierarchy`, so host the view and render its layers on the CPU.
-    static func check(_ view: some View, style: UIUserInterfaceStyle, _ name: String) throws {
-        let host = UIHostingController(rootView: view)
-        // Without a window the hosting view never draws. There is no scene in a test bundle, hence `UIWindow()`.
-        let window = UIWindow()
+    // MARK: Rendering
+
+    /// `ImageRenderer` doesn't draw `Form` (a UIKit collection view), and a test bundle without a host
+    /// app has no render server for `drawHierarchy`, so host the view in a window and draw its layers.
+    /// Renders until two frames in a row match, so the image doesn't depend on a guessed delay.
+    @available(iOS, deprecated: 26, message: "Hosts the view in a scene-less window")
+    static func render(_ view: some View, style: UIUserInterfaceStyle, size: CGSize) throws -> Data {
+        let window = sceneLessWindow()
         window.frame = CGRect(origin: .zero, size: size)
         window.overrideUserInterfaceStyle = style
-        window.rootViewController = host
+        window.rootViewController = UIHostingController(rootView: view)
         window.isHidden = false
-        host.view.layoutIfNeeded()
-        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.3))
         defer { window.isHidden = true }
 
         let format = UIGraphicsImageRendererFormat()
         format.scale = 2
-        let png = try #require(UIGraphicsImageRenderer(size: size, format: format).image { context in
-            window.layer.render(in: context.cgContext)
-        }.pngData())
+        let renderer = UIGraphicsImageRenderer(size: size, format: format)
+        var last: Data?
+        for _ in 0..<60 {
+            RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.02))
+            window.layoutIfNeeded()
+            let png = try #require(renderer.image { window.layer.render(in: $0.cgContext) }.pngData())
+            if png == last { return png }
+            last = png
+        }
+        Issue.record("the view never settled")
+        return try #require(last)
+    }
 
+    @available(iOS, deprecated: 26, message: "A test bundle has no window scene, so the window can't be given one")
+    private static func sceneLessWindow() -> UIWindow {
+        UIWindow()
+    }
+
+    // MARK: Comparing
+
+    /// At most this share of pixels may differ, each by more than `channelTolerance`: antialiasing
+    /// and text rendering wobble slightly between machines; a real change moves far more.
+    static let pixelTolerance = 0.005
+    static let channelTolerance: UInt8 = 2
+
+    static func check(_ png: Data, _ name: String) throws {
         let url = dir.appending(path: "\(name).png")
-        if ProcessInfo.processInfo.environment["RECORD_SNAPSHOTS"] != nil || !FileManager.default.fileExists(atPath: url.path) {
+        let record = ProcessInfo.processInfo.environment["RECORD_SNAPSHOTS"] != nil
+        if record || !FileManager.default.fileExists(atPath: url.path) {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             try png.write(to: url)
+            Issue.record("recorded \(name).png: look at it, commit it, and run again")
             return
         }
-        let reference = try Data(contentsOf: url)
-        #expect(png == reference, "\(name) changed: rerun with RECORD_SNAPSHOTS=1 if intended, and look at the image")
+        let reference = try #require(Bitmap(png: try Data(contentsOf: url)), "\(name).png doesn't decode")
+        let actual = try #require(Bitmap(png: png))
+        guard actual.width == reference.width, actual.height == reference.height else {
+            Attachment.record(png, named: "\(name)-actual.png")
+            Issue.record("\(name) is \(actual.width)×\(actual.height), the reference \(reference.width)×\(reference.height)")
+            return
+        }
+        let (differing, diff) = actual.compare(with: reference, tolerance: channelTolerance)
+        let share = Double(differing) / Double(actual.width * actual.height)
+        if share > pixelTolerance {
+            Attachment.record(png, named: "\(name)-actual.png")
+            if let diff { Attachment.record(diff, named: "\(name)-diff.png") }
+            Issue.record("\(name) changed (\((share * 100).formatted(.number.precision(.fractionLength(2)))) % of pixels): rerun with TEST_RUNNER_RECORD_SNAPSHOTS=1 if intended, and look at the image")
+        }
+    }
+}
+
+/// An image as 8-bit RGBA, for comparing.
+struct Bitmap {
+    let width: Int
+    let height: Int
+    let rgba: [UInt8]
+
+    init?(png: Data) {
+        guard let image = UIImage(data: png)?.cgImage else { return nil }
+        let (width, height) = (image.width, image.height)
+        var rgba = [UInt8](repeating: 0, count: width * height * 4)
+        let drawn = rgba.withUnsafeMutableBytes { bytes -> Bool in
+            guard let context = CGContext(
+                data: bytes.baseAddress, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+            context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return true
+        }
+        guard drawn else { return nil }
+        (self.width, self.height, self.rgba) = (width, height, rgba)
+    }
+
+    /// How many pixels differ by more than `tolerance` in any channel, and a PNG marking them in red
+    /// over a faded copy of `reference`.
+    func compare(with reference: Bitmap, tolerance: UInt8) -> (differing: Int, diff: Data?) {
+        var differing = 0
+        var marked = reference.rgba
+        for start in stride(from: 0, to: rgba.count, by: 4) {
+            let range = start..<(start + 4)
+            let changed = zip(rgba[range], reference.rgba[range]).contains { a, b in
+                (a > b ? a - b : b - a) > tolerance
+            }
+            if changed {
+                differing += 1
+                marked.replaceSubrange(range, with: [255, 0, 0, 255])
+            } else {
+                for i in range.dropLast() { marked[i] = 128 + marked[i] / 2 }
+            }
+        }
+        return (differing, Self.png(marked, width: width, height: height))
+    }
+
+    private static func png(_ rgba: [UInt8], width: Int, height: Int) -> Data? {
+        var bytes = rgba
+        let image = bytes.withUnsafeMutableBytes { raw in
+            CGContext(
+                data: raw.baseAddress, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)?.makeImage()
+        }
+        return image.flatMap { UIImage(cgImage: $0).pngData() }
     }
 }
 
 enum Fixtures {
-    /// The catalogue's examples as a Layers inspector, with a section and a node this kit doesn't know.
+    /// The catalogue's examples as a Layers inspector, with a section, a hidden row and a node this
+    /// kit doesn't know.
     static let layers = CraftPanel.previewLayers
+    /// Stepped and disabled numbers, a menu choice and a collapsed section.
     static let brush = CraftPanel.previewBrush
 }
 #endif
