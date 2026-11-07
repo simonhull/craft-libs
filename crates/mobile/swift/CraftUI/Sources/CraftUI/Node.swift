@@ -37,13 +37,32 @@ public struct CraftPanel: Decodable, Equatable, Identifiable, Sendable {
     }
 }
 
-/// Everything the app sent: its panels, and the open ones described (wire kind 13).
+/// Everything the app sent: its panels, and the open ones described (wire kind 13). A panel this
+/// kit can't show (a role it doesn't know, or an entry that doesn't decode) is left out, in `panels`
+/// and in `open` alike; the others still show.
 public struct CraftPanels: Decodable, Equatable, Sendable {
     public var panels: [CraftPanelInfo]
     public var open: [String: CraftPanel]
 
     public init(panels: [CraftPanelInfo] = [], open: [String: CraftPanel] = [:]) {
         (self.panels, self.open) = (panels, open)
+    }
+
+    private enum Key: String, CodingKey { case panels, open }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: Key.self)
+        panels = try c.decode([Skippable<CraftPanelInfo>].self, forKey: .panels).compactMap(\.value)
+        open = try c.decode([String: Skippable<CraftPanel>].self, forKey: .open).compactMapValues(\.value)
+    }
+
+    /// One entry of a list, `nil` if it doesn't decode, so the list moves past it.
+    private struct Skippable<T: Decodable>: Decodable {
+        let value: T?
+
+        init(from decoder: any Decoder) {
+            value = try? T(from: decoder)
+        }
     }
 }
 
@@ -73,8 +92,8 @@ public struct CraftRow: Decodable, Equatable, Identifiable, Sendable {
     }
 }
 
-/// One primitive (`ui::Node`). A type this kit doesn't know, or a node that doesn't decode, becomes
-/// `.unknown`: in a list of nodes, one bad node never takes the panel down with it.
+/// One primitive (`ui::Node`). In a list of nodes, a type this kit doesn't know becomes `.unknown`
+/// and a known one that doesn't decode `.malformed`: one bad node never takes the panel down with it.
 public indirect enum CraftNode: Decodable, Equatable, Sendable {
     /// A titled group. `collapsed` is only how it starts: after it first appears, collapsing is the
     /// user's, until the panel's views are built again (the panel closed and reopened).
@@ -83,7 +102,10 @@ public indirect enum CraftNode: Decodable, Equatable, Sendable {
     case toggle(id: String, label: String, value: Bool, enabled: Bool)
     case choice(id: String, label: String, value: String, options: [CraftChoiceOption], enabled: Bool)
     case itemList(id: String, rows: [CraftRow], reorderable: Bool)
+    /// A type this kit doesn't know (the app is newer).
     case unknown(type: String)
+    /// A known type that didn't decode (the app sent it wrong).
+    case malformed(type: String)
 
     /// What a number measures; the view formats it. A unit this kit doesn't know shows as `.none`.
     public enum Unit: String, Decodable, Sendable {
@@ -130,8 +152,11 @@ public indirect enum CraftNode: Decodable, Equatable, Sendable {
         }
     }
 
-    /// A list of nodes, each decoded on its own: one that fails becomes `.unknown` with its `type`
-    /// (empty if it has none) instead of failing the list.
+    /// The `type`s this kit draws.
+    static let knownTypes: Set = ["section", "number", "toggle", "choice", "item_list"]
+
+    /// A list of nodes, each decoded on its own: one that fails becomes `.malformed` (a known type)
+    /// or `.unknown` (with its `type`, empty if it has none) instead of failing the list.
     static func decodeEach<K: CodingKey>(_ c: KeyedDecodingContainer<K>, forKey key: K) throws -> [CraftNode] {
         try c.decode([Lenient].self, forKey: key).map(\.node)
     }
@@ -146,12 +171,13 @@ public indirect enum CraftNode: Decodable, Equatable, Sendable {
             if let node = try? CraftNode(from: decoder) {
                 self.node = node
             } else {
-                node = .unknown(type: ((try? Probe(from: decoder))?.type) ?? "")
+                let type = ((try? Probe(from: decoder))?.type) ?? ""
+                node = CraftNode.knownTypes.contains(type) ? .malformed(type: type) : .unknown(type: type)
             }
         }
     }
 
-    /// The node's id, for diffing (`unknown` nodes use their type).
+    /// The node's id, for diffing (`unknown` and `malformed` nodes use their type).
     public var id: String {
         switch self {
         case let .section(id, _, _, _), let .number(id, _, _, _, _, _, _, _), let .toggle(id, _, _, _),
@@ -159,6 +185,8 @@ public indirect enum CraftNode: Decodable, Equatable, Sendable {
             id
         case let .unknown(type):
             "unknown-\(type)"
+        case let .malformed(type):
+            "malformed-\(type)"
         }
     }
 }

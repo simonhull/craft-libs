@@ -77,4 +77,14 @@ import Testing
         #expect(CraftItemListView.moveEdit(Self.rows, from: [2], to: 3) == nil)
         #expect(CraftItemListView.moveEdit(Self.rows, from: [7], to: 0) == nil)
     }
+
+    @Test func nodesWithTheSameIdStillGetTheirOwnViews() {
+        let nodes: [CraftNode] = [
+            .toggle(id: "a", label: "A", value: true, enabled: true), .unknown(type: "hologram"),
+            .toggle(id: "a", label: "A again", value: false, enabled: true), .unknown(type: "hologram"), .malformed(type: "number"),
+        ]
+        let keys = CraftNodeView.keyed(nodes).map(\.key)
+        #expect(keys == ["a", "unknown-hologram", "a#1", "unknown-hologram#1", "malformed-number"])
+        #expect(Set(keys).count == nodes.count)
+    }
 }

@@ -13,8 +13,8 @@ public struct CraftPanelView: View {
 
     public var body: some View {
         Form {
-            ForEach(panel.nodes, id: \.id) { node in
-                CraftNodeView(node: node, panel: panel.id, send: send)
+            ForEach(CraftNodeView.keyed(panel.nodes), id: \.key) { item in
+                CraftNodeView(node: item.node, panel: panel.id, send: send)
             }
         }
         .formStyle(.grouped)
@@ -31,7 +31,7 @@ struct CraftNodeView: View {
         switch node {
         case let .section(_, title, collapsed, children):
             CraftSectionView(title: title, collapsed: collapsed) {
-                ForEach(children, id: \.id) { CraftNodeView(node: $0, panel: panel, send: send) }
+                ForEach(Self.keyed(children), id: \.key) { CraftNodeView(node: $0.node, panel: panel, send: send) }
             }
         case let .number(id, label, value, min, max, step, unit, enabled):
             // The app checks `min <= max`; a bad range still must not trap here.
@@ -50,6 +50,22 @@ struct CraftNodeView: View {
         case let .unknown(type):
             Label("Needs a newer CraftKit: \(type)", systemImage: "questionmark.square.dashed")
                 .foregroundStyle(.secondary)
+        case let .malformed(type):
+            Label("This \(type) couldn't be shown", systemImage: "exclamationmark.triangle")
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    /// Each node with a key unique among its siblings: its id, and `#n` for the n-th repeat. The app
+    /// keeps ids unique, but placeholders share theirs, and a repeat mustn't take another's view.
+    /// A node keeps its key (and its view, a drag in progress) when others come and go.
+    nonisolated static func keyed(_ nodes: [CraftNode]) -> [(key: String, node: CraftNode)] {
+        var seen: [String: Int] = [:]
+        return nodes.map { node in
+            let id = node.id
+            let count = seen[id, default: 0]
+            seen[id] = count + 1
+            return (count == 0 ? id : "\(id)#\(count)", node)
         }
     }
 }
@@ -89,6 +105,7 @@ extension CraftPanel {
             .init(id: 1, title: "Background", subtitle: "Pixel", depth: 0, visible: false, selected: false),
         ], reorderable: true),
         .unknown(type: "hologram"),
+        .malformed(type: "number"),
     ])
 
     /// A tool popover with a menu choice and stepped numbers, for previews.

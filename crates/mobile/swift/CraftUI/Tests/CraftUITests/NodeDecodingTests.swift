@@ -77,10 +77,26 @@ enum JSONValue: Decodable, Equatable {
         """#
         let panel = try JSONDecoder().decode(CraftPanel.self, from: Data(json.utf8))
         #expect(panel.nodes == [
-            .unknown(type: "toggle"),
-            .section(id: "s", title: "S", collapsed: false, children: [.unknown(type: "number"), .unknown(type: "")]),
+            .malformed(type: "toggle"),
+            .section(id: "s", title: "S", collapsed: false, children: [.malformed(type: "number"), .unknown(type: "")]),
             .toggle(id: "ok", label: "Fine", value: true, enabled: true),
         ])
+    }
+
+    /// A newer app's panel role, or a broken entry, drops only that panel: the others still show.
+    @Test func theEnvelopeSkipsPanelsItCantShow() throws {
+        let json = #"""
+        {"panels":[{"id":"layers","title":"Layers","icon":"square.3.layers.3d","role":"inspector"},
+                   {"id":"timeline","title":"Timeline","icon":"film","role":"drawer"},
+                   {"id":"broken","title":"No icon","role":"tool"},
+                   {"id":"brush","title":"Brush","icon":"paintbrush.pointed","role":"tool"}],
+         "open":{"layers":{"id":"layers","title":"Layers","role":"inspector","nodes":[]},
+                 "timeline":{"id":"timeline","title":"Timeline","role":"drawer","nodes":[]},
+                 "brush":{"id":"brush","title":"Brush","role":"tool"}}}
+        """#
+        let panels = try JSONDecoder().decode(CraftPanels.self, from: Data(json.utf8))
+        #expect(panels.panels.map(\.id) == ["layers", "brush"])
+        #expect(Array(panels.open.keys) == ["layers"])
     }
 
     @Test func anUnknownNodeBecomesAPlaceholder() throws {
