@@ -13,7 +13,43 @@ import Testing
         let committed = hold.commit()
         let commit = try #require(committed)
         #expect(commit.value == 0.4 && commit.phase == .commit && commit.gesture == begin.gesture)
-        #expect(hold.shown(app: 0.41) == 0.41, "after commit the app's value wins")
+        #expect(hold.shown(app: 0.8) == 0.4, "committed, the app not yet described: still the finger's value")
+        hold.described()
+        #expect(hold.shown(app: 0.41) == 0.41, "described since: the app's value wins")
+    }
+
+    /// The app clamps the committed value, or refuses it: its next description is the truth.
+    @Test func theNextDescriptionAfterACommitWinsWhateverItSays() {
+        var hold = GestureHold()
+        _ = hold.begin(from: 0.8)
+        _ = hold.change(to: 1.2)
+        _ = hold.commit()
+        hold.described()
+        #expect(hold.shown(app: 1.0) == 1.0, "clamped")
+        _ = hold.begin(from: 0.8)
+        _ = hold.change(to: 0.3)
+        _ = hold.commit()
+        #expect(hold.shown(app: 0.8) == 0.3)
+        hold.described()
+        #expect(hold.shown(app: 0.8) == 0.8, "refused: back to the app's value")
+    }
+
+    @Test func aNewDragReplacesTheSettlingValue() {
+        var hold = GestureHold()
+        _ = hold.begin(from: 0.8)
+        _ = hold.change(to: 0.3)
+        _ = hold.commit()
+        _ = hold.begin(from: 0.5)
+        #expect(hold.shown(app: 0.5) == 0.5)
+        _ = hold.cancel()
+        hold.described()
+        #expect(hold.shown(app: 0.6) == 0.6)
+    }
+
+    @Test func aDescriptionWithoutADragChangesNothing() {
+        var hold = GestureHold()
+        hold.described()
+        #expect(hold.shown(app: 0.7) == 0.7)
     }
 
     @Test func cancelSendsTheValueFromBeforeTheDrag() throws {
@@ -23,7 +59,9 @@ import Testing
         let cancelled = hold.cancel()
         let cancel = try #require(cancelled)
         #expect(cancel.value == 10 && cancel.phase == .cancel && cancel.gesture == begin.gesture)
-        #expect(!hold.isDragging && hold.shown(app: 12) == 12)
+        #expect(!hold.isDragging && hold.shown(app: 50) == 10, "the value put back, before the app says so")
+        hold.described()
+        #expect(hold.shown(app: 12) == 12)
     }
 
     /// What a number view does when it goes away mid-drag (`onDisappear`): cancel once, then nothing.

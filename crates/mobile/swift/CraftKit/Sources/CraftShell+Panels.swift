@@ -57,7 +57,7 @@ struct CraftPanelHost: View {
 
     var body: some View {
         if let panel = bridge.open[id] {
-            CraftPanelView(panel: panel, send: bridge.send)
+            CraftPanelView(panel: panel, descriptions: bridge.descriptions, send: bridge.send)
         } else {
             let title = bridge.panels.first { $0.id == id }?.title ?? ""
             Group {

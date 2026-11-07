@@ -2,12 +2,18 @@ import SwiftUI
 
 /// Draws one described panel. `send` delivers edits to the app; it is called only for the user's own
 /// gestures, never when a value from the app is shown.
+///
+/// `descriptions` counts the descriptions the app has sent, changed or not (a refused edit is
+/// answered with the panel again, unchanged): a number control shows the value its drag ended on
+/// until the next one.
 public struct CraftPanelView: View {
     let panel: CraftPanel
+    let descriptions: UInt64
     let send: @MainActor (CraftEdit) -> Void
 
-    public init(panel: CraftPanel, send: @escaping @MainActor (CraftEdit) -> Void) {
+    public init(panel: CraftPanel, descriptions: UInt64 = 0, send: @escaping @MainActor (CraftEdit) -> Void) {
         self.panel = panel
+        self.descriptions = descriptions
         self.send = send
     }
 
@@ -19,7 +25,13 @@ public struct CraftPanelView: View {
         }
         .formStyle(.grouped)
         .navigationTitle(panel.title)
+        .environment(\.craftDescriptions, descriptions)
     }
+}
+
+extension EnvironmentValues {
+    /// How many descriptions of the panel the app has sent (``CraftPanelView``'s `descriptions`).
+    @Entry var craftDescriptions: UInt64 = 0
 }
 
 struct CraftNodeView: View {

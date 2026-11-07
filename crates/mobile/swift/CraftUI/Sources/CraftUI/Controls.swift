@@ -57,6 +57,7 @@ struct CraftNumberView: View {
     @State private var typed = ""
     @Environment(\.locale) private var locale
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.craftDescriptions) private var descriptions
 
     var body: some View {
         let shown = hold.shown(app: value)
@@ -97,6 +98,10 @@ struct CraftNumberView: View {
             .accessibilityLabel(label)
             .accessibilityValue(formatted)
         }
+        // A new description, or a new value (a host that doesn't count descriptions): an ended
+        // drag's value gives way to the app's.
+        .onChange(of: descriptions) { hold.described() }
+        .onChange(of: value) { hold.described() }
         // Re-described without this control, or the panel closed, mid-drag: put the value back.
         .onDisappear {
             if let step = hold.cancel() { emit(step) }

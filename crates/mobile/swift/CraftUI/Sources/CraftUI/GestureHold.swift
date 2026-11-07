@@ -12,7 +12,10 @@ enum GestureID {
 }
 
 /// One number control's drag. While it runs, the control shows the finger's value, not the app's
-/// (which may lag a frame or reject a value); after it ends, the app's value wins.
+/// (which may lag a frame or reject a value). After it ends, the control shows the value it sent
+/// last (the committed one, or the one a cancel put back) until the app next describes the panel,
+/// whatever that description says: the app's value then wins, so a clamped or refused value shows
+/// the app's truth, without a frame of the value from before the drag in between.
 struct GestureHold: Equatable, Sendable {
     /// One edit's worth of a drag: its gesture, phase and value.
     struct Step: Equatable, Sendable {
@@ -28,6 +31,8 @@ struct GestureHold: Equatable, Sendable {
     }
 
     private var drag: Drag?
+    /// The value the ended drag sent last, shown until the app's next description.
+    private var settling: Double?
 
     /// Whether a drag is running.
     var isDragging: Bool { drag != nil }
@@ -36,6 +41,7 @@ struct GestureHold: Equatable, Sendable {
     mutating func begin(from value: Double) -> Step {
         let gesture = GestureID.next()
         drag = Drag(gesture: gesture, from: value, now: value)
+        settling = nil
         return Step(gesture: gesture, phase: .begin, value: value)
     }
 
@@ -50,17 +56,26 @@ struct GestureHold: Equatable, Sendable {
     /// The drag ended: its last value; `nil` if none was running.
     mutating func commit() -> Step? {
         guard let current = drag.take() else { return nil }
+        settling = current.now
         return Step(gesture: current.gesture, phase: .commit, value: current.now)
     }
 
     /// The drag was abandoned (or its view went away): the value from before it; `nil` if none was running.
     mutating func cancel() -> Step? {
         guard let current = drag.take() else { return nil }
+        settling = current.from
         return Step(gesture: current.gesture, phase: .cancel, value: current.from)
     }
 
-    /// What the control shows: the finger's value mid-drag, the app's otherwise.
+    /// The app described the panel again (any description, changed or not): an ended drag's value
+    /// gives way to the app's.
+    mutating func described() {
+        settling = nil
+    }
+
+    /// What the control shows: the finger's value mid-drag, then the value the drag ended on until
+    /// the app describes the panel again, the app's otherwise.
     func shown(app: Double) -> Double {
-        drag?.now ?? app
+        drag?.now ?? settling ?? app
     }
 }

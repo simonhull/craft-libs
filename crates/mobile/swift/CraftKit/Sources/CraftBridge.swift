@@ -94,6 +94,9 @@ public final class CraftBridge {
     /// The open panels, described, by id (wire kind 13's `open`): changes as often as once a frame
     /// mid-drag.
     public private(set) var open: [String: CraftPanel] = [:]
+    /// How many descriptions (wire kind 13) have arrived, changed or not: a refused edit is answered
+    /// with the panels again, unchanged, and a number control that ended a drag waits for exactly that.
+    private(set) var descriptions: UInt64 = 0
     /// Whether the app has described its panels since the shell last said which are on screen:
     /// until then a shown panel without a description is still coming; after, it isn't.
     private(set) var describedSinceShowing = false
@@ -439,6 +442,7 @@ public final class CraftBridge {
                 // Each assigned only when it changed, so its observers alone redraw.
                 if decoded.panels != panels { panels = decoded.panels }
                 if decoded.open != open { open = decoded.open }
+                descriptions &+= 1
                 if !describedSinceShowing { describedSinceShowing = true }
             } catch {
                 craftLog.error("native panels didn't decode, kept the last ones: \(error, privacy: .public)")
