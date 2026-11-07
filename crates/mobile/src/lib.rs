@@ -29,6 +29,7 @@ pub mod platform;
 mod pointer;
 mod session;
 pub mod snapshot;
+pub mod ui;
 
 #[cfg(target_os = "android")]
 #[doc(hidden)]
