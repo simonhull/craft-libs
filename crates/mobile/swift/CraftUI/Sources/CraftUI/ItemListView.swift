@@ -7,8 +7,7 @@ struct CraftItemListView: View {
     let rows: [CraftRow]
     let reorderable: Bool
     let panel: String
-    @Binding var hold: GestureHold
-    let send: (CraftEdit) -> Void
+    let send: @MainActor (CraftEdit) -> Void
     @State private var renaming: CraftRow?
     @State private var newName = ""
 
@@ -81,7 +80,7 @@ struct CraftItemListView: View {
     }
 
     private func one(_ value: CraftEdit.Value) {
-        send(CraftEdit(panel: panel, control: id, phase: .commit, gesture: hold.oneShot(), value: value))
+        send(CraftEdit(panel: panel, control: id, phase: .commit, gesture: GestureID.next(), value: value))
     }
 
     private func move(from source: IndexSet, to destination: Int) {

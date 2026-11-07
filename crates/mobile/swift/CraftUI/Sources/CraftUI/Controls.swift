@@ -45,13 +45,14 @@ struct CraftNumberView: View {
     let step: Double?
     let unit: CraftNode.Unit
     let panel: String
-    @Binding var hold: GestureHold
-    let send: (CraftEdit) -> Void
+    let send: @MainActor (CraftEdit) -> Void
+    /// This control's own drag: it lives and dies with the view.
+    @State private var hold = GestureHold()
     @State private var typing = false
     @State private var typed = ""
 
     var body: some View {
-        let shown = hold.shown(control: id, app: value)
+        let shown = hold.shown(app: value)
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text(label)
@@ -69,13 +70,17 @@ struct CraftNumberView: View {
             // The setter runs only for the user's own input, never when the app's value changes.
             Slider(value: Binding(get: { shown }, set: slide), in: range) { editing in
                 if editing {
-                    emit(hold.begin(control: id, from: value))
-                } else if let step = hold.commit(control: id) {
+                    emit(hold.begin(from: value))
+                } else if let step = hold.commit() {
                     emit(step)
                 }
             }
             .accessibilityLabel(label)
             .accessibilityValue(Self.format(shown, unit))
+        }
+        // Re-described without this control, or the panel closed, mid-drag: put the value back.
+        .onDisappear {
+            if let step = hold.cancel() { emit(step) }
         }
         .alert(label, isPresented: $typing) {
             TextField(label, text: $typed)
@@ -89,18 +94,18 @@ struct CraftNumberView: View {
 
     private func slide(to raw: Double) {
         let new = Self.snap(raw, step: step, in: range)
-        if hold.dragging(control: id) {
-            if new != hold.shown(control: id, app: value), let step = hold.change(control: id, to: new) { emit(step) }
+        if hold.isDragging {
+            if new != hold.shown(app: value), let step = hold.change(to: new) { emit(step) }
         } else if new != value {
             // Not a drag (VoiceOver adjust, keyboard): one complete edit.
-            send(CraftEdit(panel: panel, control: id, phase: .commit, gesture: hold.oneShot(), value: .number(new)))
+            send(CraftEdit(panel: panel, control: id, phase: .commit, gesture: GestureID.next(), value: .number(new)))
         }
     }
 
     private func typedValue() {
         guard let n = Double(typed.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ",", with: ".")), n.isFinite else { return }
         let v = Self.snap(unit == .percent ? n / 100 : n, step: step, in: range)
-        send(CraftEdit(panel: panel, control: id, phase: .commit, gesture: hold.oneShot(), value: .number(v)))
+        send(CraftEdit(panel: panel, control: id, phase: .commit, gesture: GestureID.next(), value: .number(v)))
     }
 
     private func emit(_ s: GestureHold.Step) {
@@ -129,14 +134,13 @@ struct CraftToggleView: View {
     let label: String
     let value: Bool
     let panel: String
-    @Binding var hold: GestureHold
-    let send: (CraftEdit) -> Void
+    let send: @MainActor (CraftEdit) -> Void
 
     var body: some View {
         // The setter runs only when the user flips the switch.
         Toggle(label, isOn: Binding(get: { value }, set: { new in
             guard new != value else { return }
-            send(CraftEdit(panel: panel, control: id, phase: .commit, gesture: hold.oneShot(), value: .toggle(new)))
+            send(CraftEdit(panel: panel, control: id, phase: .commit, gesture: GestureID.next(), value: .toggle(new)))
         }))
     }
 }
@@ -148,14 +152,13 @@ struct CraftChoiceView: View {
     let value: String
     let options: [CraftChoiceOption]
     let panel: String
-    @Binding var hold: GestureHold
-    let send: (CraftEdit) -> Void
+    let send: @MainActor (CraftEdit) -> Void
 
     var body: some View {
         // The setter runs only when the user picks; picking the current option sends nothing.
         let binding = Binding(get: { value }, set: { (new: String) in
             guard new != value else { return }
-            send(CraftEdit(panel: panel, control: id, phase: .commit, gesture: hold.oneShot(), value: .choice(new)))
+            send(CraftEdit(panel: panel, control: id, phase: .commit, gesture: GestureID.next(), value: .choice(new)))
         })
         let picker = Picker(label, selection: binding) {
             ForEach(options) { Text($0.label).tag($0.id) }

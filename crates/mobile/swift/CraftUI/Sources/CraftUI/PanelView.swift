@@ -4,10 +4,9 @@ import SwiftUI
 /// gestures, never when a value from the app is shown.
 public struct CraftPanelView: View {
     let panel: CraftPanel
-    let send: (CraftEdit) -> Void
-    @State private var hold = GestureHold()
+    let send: @MainActor (CraftEdit) -> Void
 
-    public init(panel: CraftPanel, send: @escaping (CraftEdit) -> Void) {
+    public init(panel: CraftPanel, send: @escaping @MainActor (CraftEdit) -> Void) {
         self.panel = panel
         self.send = send
     }
@@ -15,7 +14,7 @@ public struct CraftPanelView: View {
     public var body: some View {
         Form {
             ForEach(panel.nodes, id: \.id) { node in
-                CraftNodeView(node: node, panel: panel.id, hold: $hold, send: send)
+                CraftNodeView(node: node, panel: panel.id, send: send)
             }
         }
         .formStyle(.grouped)
@@ -26,29 +25,28 @@ public struct CraftPanelView: View {
 struct CraftNodeView: View {
     let node: CraftNode
     let panel: String
-    @Binding var hold: GestureHold
-    let send: (CraftEdit) -> Void
+    let send: @MainActor (CraftEdit) -> Void
 
     var body: some View {
         switch node {
         case let .section(_, title, collapsed, children):
             CraftSectionView(title: title, collapsed: collapsed) {
-                ForEach(children, id: \.id) { CraftNodeView(node: $0, panel: panel, hold: $hold, send: send) }
+                ForEach(children, id: \.id) { CraftNodeView(node: $0, panel: panel, send: send) }
             }
         case let .number(id, label, value, min, max, step, unit, enabled):
             // The app checks `min <= max`; a bad range still must not trap here.
             CraftNumberView(
                 id: id, label: label, value: value, range: min <= max ? min...max : min...min, step: step, unit: unit,
-                panel: panel, hold: $hold, send: send)
+                panel: panel, send: send)
                 .disabled(!enabled)
         case let .toggle(id, label, value, enabled):
-            CraftToggleView(id: id, label: label, value: value, panel: panel, hold: $hold, send: send)
+            CraftToggleView(id: id, label: label, value: value, panel: panel, send: send)
                 .disabled(!enabled)
         case let .choice(id, label, value, options, enabled):
-            CraftChoiceView(id: id, label: label, value: value, options: options, panel: panel, hold: $hold, send: send)
+            CraftChoiceView(id: id, label: label, value: value, options: options, panel: panel, send: send)
                 .disabled(!enabled)
         case let .itemList(id, rows, reorderable):
-            CraftItemListView(id: id, rows: rows, reorderable: reorderable, panel: panel, hold: $hold, send: send)
+            CraftItemListView(id: id, rows: rows, reorderable: reorderable, panel: panel, send: send)
         case let .unknown(type):
             Label("Needs a newer CraftKit: \(type)", systemImage: "questionmark.square.dashed")
                 .foregroundStyle(.secondary)
