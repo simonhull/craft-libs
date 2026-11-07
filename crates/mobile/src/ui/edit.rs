@@ -1,0 +1,142 @@
+//! What the shell sends back from native panels.
+
+use serde::{Deserialize, Serialize};
+
+use super::{ControlId, PanelId};
+
+/// Where a gesture is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Phase {
+    /// A drag started: open one undo step.
+    Begin,
+    /// A new value while dragging: preview it, in the same step.
+    Change,
+    /// The final value: close the step. A tap or a pick sends this alone.
+    Commit,
+    /// The gesture was abandoned: put back the value from before `Begin`.
+    Cancel,
+}
+
+/// Above or below a target row.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Position {
+    /// Above it.
+    Above,
+    /// Below it.
+    Below,
+}
+
+/// The value an edit carries, by the kind of control.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
+pub enum EditValue {
+    /// A [`super::Number`]'s value.
+    Number(f64),
+    /// A [`super::Toggle`]'s value.
+    Toggle(bool),
+    /// A [`super::Choice`]'s option id.
+    Choice(String),
+    /// A row was tapped.
+    Select {
+        /// The row's id.
+        row: u64,
+    },
+    /// A row's eye was toggled.
+    SetVisible {
+        /// The row's id.
+        row: u64,
+        /// Shown.
+        visible: bool,
+    },
+    /// A row was renamed.
+    Rename {
+        /// The row's id.
+        row: u64,
+        /// Its new name.
+        name: String,
+    },
+    /// A row was dragged next to another.
+    Move {
+        /// The row moved.
+        row: u64,
+        /// The row it was dropped on.
+        target: u64,
+        /// Above or below that row.
+        position: Position,
+    },
+}
+
+/// One change from a native panel.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Edit {
+    /// The panel.
+    pub panel: PanelId,
+    /// The control within it.
+    pub control: ControlId,
+    /// Where the gesture is.
+    pub phase: Phase,
+    /// Unique per gesture: every edit of one drag carries the same number (apps key undo
+    /// coalescing on it).
+    pub gesture: u64,
+    /// The value.
+    pub value: EditValue,
+}
+
+/// A message from the shell's native panels (as opposed to a [`crate::Action`]).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "action", rename_all = "snake_case")]
+pub enum Message {
+    /// A control changed.
+    Edit(Edit),
+    /// These panels are on screen now; only they are described.
+    OpenPanels {
+        /// Their ids.
+        open: Vec<PanelId>,
+    },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn an_edit_parses_from_the_shell() {
+        let m: Message = serde_json::from_value(json!({
+            "action": "edit", "panel": "layers", "control": "opacity", "phase": "change", "gesture": 3,
+            "value": {"kind": "number", "value": 0.25}
+        }))
+        .unwrap();
+        assert_eq!(
+            m,
+            Message::Edit(Edit {
+                panel: "layers".into(),
+                control: "opacity".into(),
+                phase: Phase::Change,
+                gesture: 3,
+                value: EditValue::Number(0.25)
+            })
+        );
+    }
+
+    #[test]
+    fn row_edits_parse() {
+        let v: EditValue = serde_json::from_value(json!({"kind": "move", "value": {"row": 4, "target": 9, "position": "below"}})).unwrap();
+        assert_eq!(v, EditValue::Move { row: 4, target: 9, position: Position::Below });
+        let v: EditValue = serde_json::from_value(json!({"kind": "rename", "value": {"row": 4, "name": "Sky"}})).unwrap();
+        assert_eq!(v, EditValue::Rename { row: 4, name: "Sky".into() });
+    }
+
+    #[test]
+    fn the_shell_says_which_panels_are_open() {
+        let m: Message = serde_json::from_value(json!({"action": "open_panels", "open": ["layers"]})).unwrap();
+        assert_eq!(m, Message::OpenPanels { open: vec!["layers".into()] });
+    }
+
+    #[test]
+    fn plain_actions_are_not_messages() {
+        assert!(serde_json::from_value::<Message>(json!({"action": "undo"})).is_err());
+    }
+}
