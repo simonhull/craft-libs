@@ -129,6 +129,17 @@ mod tests {
         assert_eq!(v, EditValue::Rename { row: 4, name: "Sky".into() });
     }
 
+    /// Exactly what the Swift `CraftEdit` encodes for a row's eye.
+    #[test]
+    fn craft_ui_row_edits_parse() {
+        let m: Message = serde_json::from_str(r#"{"action":"edit","panel":"layers","control":"rows","phase":"commit","gesture":1,"value":{"kind":"set_visible","value":{"row":2,"visible":false}}}"#).unwrap();
+        let Message::Edit(edit) = m else { panic!("not an edit: {m:?}") };
+        assert_eq!(edit.value, EditValue::SetVisible { row: 2, visible: false });
+        let m: Message = serde_json::from_str(r#"{"action":"edit","panel":"layers","control":"rows","phase":"commit","gesture":2,"value":{"kind":"move","value":{"row":4,"target":9,"position":"below"}}}"#).unwrap();
+        let Message::Edit(edit) = m else { panic!("not an edit: {m:?}") };
+        assert_eq!(edit.value, EditValue::Move { row: 4, target: 9, position: Position::Below });
+    }
+
     #[test]
     fn the_shell_says_which_panels_are_open() {
         let m: Message = serde_json::from_value(json!({"action": "open_panels", "open": ["layers"]})).unwrap();
