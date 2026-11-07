@@ -81,6 +81,7 @@ macro_rules! id_newtype {
 mod catalogue;
 mod command;
 mod edit;
+mod menu;
 mod node;
 mod publish;
 mod shell;
@@ -88,6 +89,7 @@ mod shell;
 pub use catalogue::{catalogue_json, catalogue_markdown};
 pub use command::{CommandId, Shortcut};
 pub use edit::{Edit, EditError, EditValue, GestureId, Message, Phase, Position, SelectMode};
+pub use menu::{Menu, MenuBar, MenuCommand, MenuEntry, Submenu};
 pub use node::{
     Choice, ChoiceOption, ControlId, ItemList, Node, Number, Panel, PanelId, PanelInfo, PanelRole, Row, RowId, Scale, Section, Toggle, Unit,
 };
@@ -147,5 +149,17 @@ pub enum UiError {
     BadShortcut {
         /// The text given.
         shortcut: String,
+    },
+    /// A menu, submenu or command without a title or label.
+    #[error("{context} has no label")]
+    EmptyLabel {
+        /// Which one.
+        context: String,
+    },
+    /// A command appears twice in the menu bar.
+    #[error("command `{command}` appears twice in the menus")]
+    DuplicateCommand {
+        /// The repeated command.
+        command: CommandId,
     },
 }

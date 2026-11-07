@@ -15,14 +15,33 @@ final class GalleryStore {
         var id: String { name }
     }
 
+    /// One piece of chrome from the catalogue (the menu bar, the status), its example kept as JSON.
+    struct Chrome: Decodable, Identifiable {
+        let name: String
+        let about: String
+        let example: JSONData
+        var id: String { name }
+    }
+
+    /// A JSON value kept as its bytes, decoded later as whatever it is.
+    struct JSONData: Decodable {
+        let data: Data
+
+        init(from decoder: any Decoder) throws {
+            data = try JSONEncoder().encode(try AnyJSON(from: decoder))
+        }
+    }
+
     private struct Catalogue: Decodable {
         let primitives: [Entry]
+        let chrome: [Chrome]
     }
 
     /// The id of the panel that shows every example at once, as an inspector would.
     static let everything = "everything"
 
     private(set) var entries: [Entry] = []
+    private(set) var chrome: [Chrome] = []
     /// Why the catalogue didn't load, if it didn't.
     private(set) var problem: String?
     /// One edit as sent.
@@ -44,7 +63,13 @@ final class GalleryStore {
                 problem = "ui.json is missing from the app bundle."
                 return
             }
-            entries = try JSONDecoder().decode(Catalogue.self, from: Data(contentsOf: url)).primitives
+            let catalogue = try JSONDecoder().decode(Catalogue.self, from: Data(contentsOf: url))
+            entries = catalogue.primitives
+            chrome = catalogue.chrome
+            if let menus = chrome.first(where: { $0.name == "menu_bar" }) {
+                CraftMenus.shared.update(try JSONDecoder().decode(CraftMenuBar.self, from: menus.example.data))
+            }
+            CraftMenus.shared.send = { [weak self] message in self?.logMessage(message) }
         } catch {
             problem = "Couldn't read the catalogue: \(error.localizedDescription)"
         }
@@ -67,9 +92,7 @@ final class GalleryStore {
         // Sorted, so every edit reads the same way (the app doesn't mind the order).
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         if let json = try? encoder.encode(edit) {
-            sentCount += 1
-            log.insert(Sent(id: sentCount, json: String(decoding: json, as: UTF8.self)), at: 0)
-            log.removeLast(max(0, log.count - 50))
+            logLine(String(decoding: json, as: UTF8.self))
         }
         switch edit.phase {
         case .begin:
@@ -88,6 +111,21 @@ final class GalleryStore {
         for index in entries.indices {
             entries[index].example = entries[index].example.applying(value, to: control)
         }
+    }
+
+    /// Log a chrome message (a menu command, a shortcut) as the app would receive it.
+    func logMessage(_ message: some Encodable) {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        guard let json = try? encoder.encode(message) else { return }
+        logLine(String(decoding: json, as: UTF8.self))
+    }
+
+    /// Log a line, newest first.
+    func logLine(_ line: String) {
+        sentCount += 1
+        log.insert(Sent(id: sentCount, json: line), at: 0)
+        log.removeLast(max(0, log.count - 50))
     }
 
     func clearLog() {
@@ -164,5 +202,32 @@ extension CraftRow {
         CraftRow(
             id: id, title: title ?? self.title, subtitle: subtitle, depth: depth,
             visible: visible ?? self.visible, selected: selected ?? self.selected)
+    }
+}
+
+/// Any JSON value, to carry a catalogue example through `Decodable` untouched.
+enum AnyJSON: Codable {
+    case null, bool(Bool), number(Double), string(String), array([AnyJSON]), object([String: AnyJSON])
+
+    init(from decoder: any Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        if c.decodeNil() { self = .null }
+        else if let b = try? c.decode(Bool.self) { self = .bool(b) }
+        else if let n = try? c.decode(Double.self) { self = .number(n) }
+        else if let s = try? c.decode(String.self) { self = .string(s) }
+        else if let a = try? c.decode([AnyJSON].self) { self = .array(a) }
+        else { self = try .object(c.decode([String: AnyJSON].self)) }
+    }
+
+    func encode(to encoder: any Encoder) throws {
+        var c = encoder.singleValueContainer()
+        switch self {
+        case .null: try c.encodeNil()
+        case let .bool(b): try c.encode(b)
+        case let .number(n): try c.encode(n)
+        case let .string(s): try c.encode(s)
+        case let .array(a): try c.encode(a)
+        case let .object(o): try c.encode(o)
+        }
     }
 }

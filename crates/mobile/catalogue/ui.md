@@ -227,3 +227,86 @@ And it sends edits, one message each; here the user switched Visible off:
   }
 }
 ```
+
+## Chrome
+
+A shell that draws parts of the app's chrome natively says so each time it starts the app, before it says which panels are on screen (`CraftApp::shell`); the app then hides its own versions. The features are `panels`, `menus`, `rail` and `status`; a name the app doesn't know is ignored:
+
+```json
+{"action":"shell","features":["panels","menus","rail","status"]}
+```
+
+A `command` without `params` runs the app's command as its menu item does (`CraftApp::command`); with `params` it is the app's `Action::Command`, as before. A `shortcut` goes to the app's own key handling (`CraftApp::shortcut`).
+
+### `menu_bar` (request kind 15)
+
+The app's menus, in the iPad menu bar (pointer at the top edge, or hold ⌘) and a toolbar menu for touch. `Platform::set_menu` sends it whenever it changes (request kind 15), and again when the shell restarts.
+
+**Fields:** `menus`, left to right, each a `title` and `items`. An item is a `command` (an `id` unique in the whole bar, a `label`, a `shortcut` in the portable form such as `Cmd+Shift+Z` or `null`, `enabled`, and `checked`: `true` or `false` for a check mark, `null` for none), a `separator`, or a `submenu` with a `label` and `items`. Labels are never empty. A shortcut's modifiers are `Ctrl`, `Cmd`, `Alt` and `Shift` (`Ctrl` is the Control key, not ⌘), then one key: a character or a named key (`Enter`, `Tab`, `ArrowUp`, `F5`).
+
+```json
+{
+  "menus": [
+    {
+      "title": "Edit",
+      "items": [
+        {
+          "type": "command",
+          "id": "edit.undo",
+          "label": "Undo",
+          "shortcut": "Cmd+Z",
+          "enabled": true,
+          "checked": null
+        },
+        {
+          "type": "command",
+          "id": "edit.redo",
+          "label": "Redo",
+          "shortcut": "Cmd+Shift+Z",
+          "enabled": false,
+          "checked": null
+        },
+        {
+          "type": "separator"
+        },
+        {
+          "type": "submenu",
+          "label": "Transform",
+          "items": [
+            {
+              "type": "command",
+              "id": "image.flip_horizontal",
+              "label": "Flip Horizontal",
+              "shortcut": null,
+              "enabled": true,
+              "checked": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "View",
+      "items": [
+        {
+          "type": "command",
+          "id": "view.rulers",
+          "label": "Rulers",
+          "shortcut": "Cmd+R",
+          "enabled": true,
+          "checked": true
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Sends:** a `command` with the item's `id` when the user picks an item without a shortcut; a `shortcut` with its `keys` when the item has one, or the keys are pressed on a hardware keyboard, so the app's own key handling decides, as for the key itself. Enabled and checked are read when a menu opens, so changing them alone redraws nothing.
+
+For example:
+
+```json
+{"action":"command","id":"image.flip_horizontal"}
+{"action":"shortcut","keys":"Cmd+Z"}
+```

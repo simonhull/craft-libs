@@ -30,3 +30,26 @@ targets:
         SWIFT_VERSION: "6.0"
         SWIFT_STRICT_CONCURRENCY: complete
         CODE_SIGN_STYLE: Automatic
+  # Hardware keyboard shortcuts against the menu bar (xcodebuild test -scheme Gallery …).
+  GalleryUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - UITests
+    dependencies:
+      - target: Gallery
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.craft.GalleryUITests
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "2"
+        SWIFT_VERSION: "6.0"
+        CODE_SIGN_STYLE: Automatic
+schemes:
+  Gallery:
+    build:
+      targets:
+        Gallery: all
+    test:
+      targets:
+        - GalleryUITests

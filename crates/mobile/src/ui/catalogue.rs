@@ -6,8 +6,8 @@ use std::fmt::Write as _;
 use serde::Serialize;
 
 use super::{
-    Choice, ChoiceOption, Edit, EditValue, ItemList, Message, Node, Number, Panel, PanelInfo, PanelRole, Phase, Position, Published, Row, Scale,
-    Section, Toggle, Unit,
+    Choice, ChoiceOption, Edit, EditValue, ItemList, Menu, MenuBar, MenuEntry, Message, Node, Number, Panel, PanelInfo, PanelRole, Phase, Position,
+    Published, Row, Scale, Section, Toggle, Unit,
 };
 
 /// The catalogue's format version; bump it when a node's JSON changes.
@@ -25,11 +25,34 @@ struct Primitive {
     edit: Option<Message>,
 }
 
+/// One piece of chrome the shell draws for the app (the menu bar, the status): what it is, its
+/// fields, the request kind that carries it, and what the shell sends back.
+#[derive(Serialize)]
+struct Chrome {
+    name: &'static str,
+    about: &'static str,
+    fields: &'static str,
+    /// The request kind that carries it.
+    kind: i32,
+    sends: &'static str,
+    example: ChromeExample,
+    /// Messages it sends, as the shell sends them (`Control::parse` reads each).
+    messages: Vec<serde_json::Value>,
+}
+
+/// A chrome example, serialized as its own type (field order kept).
+#[derive(Serialize)]
+#[serde(untagged)]
+enum ChromeExample {
+    MenuBar(MenuBar),
+}
+
 /// The whole catalogue, as `ui.json` holds it.
 #[derive(Serialize)]
 struct Catalogue {
     version: u32,
     primitives: Vec<Primitive>,
+    chrome: Vec<Chrome>,
 }
 
 /// An edit to a control of the `layers` panel.
@@ -95,10 +118,40 @@ fn examples() -> Vec<Primitive> {
     out
 }
 
-/// The catalogue as JSON: `{version, primitives: [{name, about, fields, sends, example, edit}]}`.
+/// A menu bar for the catalogue: a command with a shortcut, a disabled one, a separator, a
+/// checked item and a submenu.
+fn example_menu_bar() -> MenuBar {
+    let undo = MenuEntry::command("edit.undo", "Undo").shortcut("Cmd+Z".parse().ok());
+    let redo = MenuEntry::command("edit.redo", "Redo").shortcut("Cmd+Shift+Z".parse().ok()).enabled(false);
+    let rulers = MenuEntry::command("view.rulers", "Rulers").shortcut("Cmd+R".parse().ok()).checked(Some(true));
+    let flip = MenuEntry::command("image.flip_horizontal", "Flip Horizontal");
+    let menus = vec![
+        Menu::new("Edit", vec![undo.into(), redo.into(), MenuEntry::Separator, MenuEntry::submenu("Transform", vec![flip.into()])]),
+        Menu::new("View", vec![rulers.into()]),
+    ];
+    MenuBar::new(menus).unwrap_or_default()
+}
+
+fn chrome() -> Vec<Chrome> {
+    vec![Chrome {
+        name: "menu_bar",
+        about: "The app's menus, in the iPad menu bar (pointer at the top edge, or hold ⌘) and a toolbar menu for touch. `Platform::set_menu` sends it whenever it changes (request kind 15), and again when the shell restarts.",
+        fields: "`menus`, left to right, each a `title` and `items`. An item is a `command` (an `id` unique in the whole bar, a `label`, a `shortcut` in the portable form such as `Cmd+Shift+Z` or `null`, `enabled`, and `checked`: `true` or `false` for a check mark, `null` for none), a `separator`, or a `submenu` with a `label` and `items`. Labels are never empty. A shortcut's modifiers are `Ctrl`, `Cmd`, `Alt` and `Shift` (`Ctrl` is the Control key, not ⌘), then one key: a character or a named key (`Enter`, `Tab`, `ArrowUp`, `F5`).",
+        kind: 15,
+        sends: "a `command` with the item's `id` when the user picks an item without a shortcut; a `shortcut` with its `keys` when the item has one, or the keys are pressed on a hardware keyboard, so the app's own key handling decides, as for the key itself. Enabled and checked are read when a menu opens, so changing them alone redraws nothing.",
+        example: ChromeExample::MenuBar(example_menu_bar()),
+        messages: vec![
+            serde_json::json!({"action": "command", "id": "image.flip_horizontal"}),
+            serde_json::json!({"action": "shortcut", "keys": "Cmd+Z"}),
+        ],
+    }]
+}
+
+/// The catalogue as JSON: `{version, primitives: [{name, about, fields, sends, example, edit}],
+/// chrome: [{name, about, fields, kind, sends, example, messages}]}`.
 #[must_use]
 pub fn catalogue_json() -> String {
-    let catalogue = Catalogue { version: VERSION, primitives: examples() };
+    let catalogue = Catalogue { version: VERSION, primitives: examples(), chrome: chrome() };
     let mut s = serde_json::to_string_pretty(&catalogue).unwrap_or_default();
     s.push('\n');
     s
@@ -129,6 +182,34 @@ pub fn catalogue_markdown() -> String {
         }
     }
     s.push_str(&wire_markdown());
+    s.push_str(&chrome_markdown());
+    s
+}
+
+/// The chrome the shell draws, and the messages it sends about it.
+fn chrome_markdown() -> String {
+    let mut s = String::from(
+        "\n## Chrome\n\n\
+         A shell that draws parts of the app's chrome natively says so each time it starts the app, \
+         before it says which panels are on screen (`CraftApp::shell`); the app then hides its own \
+         versions. The features are `panels`, `menus`, `rail` and `status`; a name the app doesn't \
+         know is ignored:\n\n```json\n{\"action\":\"shell\",\"features\":[\"panels\",\"menus\",\"rail\",\"status\"]}\n```\n\n\
+         A `command` without `params` runs the app's command as its menu item does \
+         (`CraftApp::command`); with `params` it is the app's `Action::Command`, as before. A \
+         `shortcut` goes to the app's own key handling (`CraftApp::shortcut`).\n",
+    );
+    for c in chrome() {
+        let json = serde_json::to_string_pretty(&c.example).unwrap_or_default();
+        let _ = write!(
+            s,
+            "\n### `{}` (request kind {})\n\n{}\n\n**Fields:** {}\n\n```json\n{json}\n```\n\n**Sends:** {}\n",
+            c.name, c.kind, c.about, c.fields, c.sends
+        );
+        if !c.messages.is_empty() {
+            let messages: Vec<String> = c.messages.iter().map(|m| serde_json::to_string(m).unwrap_or_default()).collect();
+            let _ = write!(s, "\nFor example:\n\n```json\n{}\n```\n", messages.join("\n"));
+        }
+    }
     s
 }
 
@@ -203,6 +284,21 @@ mod tests {
             if let Some(edit) = &e.edit {
                 let json = serde_json::to_vec(edit).unwrap();
                 assert_eq!(crate::control::Control::parse(&json).unwrap(), crate::control::Control::Ui(edit.clone()), "{}", e.name);
+            }
+        }
+    }
+
+    /// Each chrome example is what its Rust type produces, and each message parses as a control.
+    #[test]
+    fn every_chrome_example_is_valid() {
+        let menu_bar = chrome().into_iter().find(|c| c.name == "menu_bar").unwrap();
+        let json = serde_json::to_string(&menu_bar.example).unwrap();
+        assert_eq!(serde_json::from_str::<MenuBar>(&json).unwrap(), example_menu_bar());
+        assert_eq!(example_menu_bar().menus().len(), 2, "valid, not the empty default");
+        for c in chrome() {
+            for message in &c.messages {
+                let json = serde_json::to_vec(message).unwrap();
+                assert!(crate::control::Control::parse(&json).is_ok(), "{}: {message}", c.name);
             }
         }
     }

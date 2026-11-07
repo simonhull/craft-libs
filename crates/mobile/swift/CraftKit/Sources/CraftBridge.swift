@@ -160,6 +160,7 @@ public final class CraftBridge {
     /// Route the app's requests here. Call before the canvas starts.
     func connect() {
         craft_set_handler(Unmanaged.passUnretained(self).toOpaque(), craftHandler)
+        CraftMenus.shared.send = { [weak self] message in self?.send(message) }
     }
 
     // MARK: Native controls
@@ -470,6 +471,12 @@ public final class CraftBridge {
         case 14:
             openRequests += 1
             openRequest = CraftOpenPanelRequest(id: text, serial: openRequests)
+        case 15:
+            do {
+                CraftMenus.shared.update(try JSONDecoder().decode(CraftMenuBar.self, from: Data(text.utf8)))
+            } catch {
+                craftLog.error("menus didn't decode, kept the last ones: \(error, privacy: .public)")
+            }
         default:
             break
         }

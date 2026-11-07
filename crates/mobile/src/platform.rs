@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::OnceLock;
 
-use crate::ui::PanelId;
+use crate::ui::{MenuBar, PanelId};
 
 /// Where the app keeps its own data (recovery files, settings), set once by the shell before the
 /// app starts: Application Support on iOS, `filesDir` on Android.
@@ -195,6 +195,9 @@ pub(crate) enum Request {
     /// Open this native panel as the user would from its toolbar button (the app's own menu
     /// asked for it). A one-shot: never repeated to a shell that starts listening later.
     OpenPanel(PanelId),
+    /// The app's menu bar ([`MenuBar`] as JSON), sent when it changes and again when the shell
+    /// restarts.
+    Menus(String),
 }
 
 impl Request {
@@ -217,6 +220,7 @@ impl Request {
     /// | 12   | pick photos   | —                              | —        |
     /// | 13   | native panels | the panels as JSON (`ui`)      | —        |
     /// | 14   | open a panel  | the panel's id                 | —        |
+    /// | 15   | menus         | the menu bar as JSON (`ui`)    | —        |
     ///
     /// Kind 10 is answered with the clipboard's contents (`craft_paste_*`, `CraftNative.paste*`),
     /// text first while a text field is focused, else an image first; an image the app copied
@@ -245,6 +249,7 @@ impl Request {
             Request::PickPhotos => (12, "".into(), None),
             Request::Panels(json) => (13, json.as_str().into(), None),
             Request::OpenPanel(id) => (14, id.as_str().into(), None),
+            Request::Menus(json) => (15, json.as_str().into(), None),
         }
     }
 }
@@ -261,6 +266,8 @@ struct Shared {
     writing: VecDeque<(Location, String)>,
     /// The clipboard as the shell read it for this frame's paste.
     pasted: Option<Rc<Pasted>>,
+    /// The menu bar last sent, and its JSON, for a shell that restarts.
+    menu: Option<(MenuBar, String)>,
 }
 
 /// The app's handle on the native shell. Cheap to clone; everything runs on the app's thread.
@@ -369,6 +376,32 @@ impl Platform {
     /// opens nothing. Nothing reports back.
     pub fn open_panel(&self, id: impl Into<PanelId>) {
         self.push(Request::OpenPanel(id.into()));
+    }
+
+    /// Show `bar` as the app's menus, in the shell's native menu bar (when it declared
+    /// [`crate::ui::Feature::Menus`]). Call it whenever the menus may have changed, every frame if
+    /// that's simplest: only a change is sent, and a shell that restarts gets the last one again.
+    pub fn set_menu(&self, bar: MenuBar) {
+        let mut shared = self.shared.borrow_mut();
+        if shared.menu.as_ref().is_some_and(|(sent, _)| *sent == bar) {
+            return;
+        }
+        match serde_json::to_string(&bar) {
+            Ok(json) => {
+                shared.out.push(Request::Menus(json.clone()));
+                shared.menu = Some((bar, json));
+            }
+            Err(e) => log::error!("craft-mobile: menus: {e}"),
+        }
+    }
+
+    /// The shell restarted: send it the menus again.
+    pub(crate) fn resend_chrome(&self) {
+        let mut shared = self.shared.borrow_mut();
+        if let Some((_, json)) = &shared.menu {
+            let json = json.clone();
+            shared.out.push(Request::Menus(json));
+        }
     }
 
     /// Open a link in the system browser (or the app that handles it).
@@ -535,6 +568,33 @@ mod tests {
         platform.open_panel(crate::ui::PanelId::from("brush"));
         let wired: Vec<_> = platform.take_requests().iter().map(|r| r.wire()).map(|(k, t, d)| (k, t.into_owned(), d.is_none())).collect();
         assert_eq!(wired, [(14, "layers".to_owned(), true), (14, "brush".to_owned(), true)]);
+    }
+
+    fn wired(platform: &Platform) -> Vec<(i32, String)> {
+        platform.take_requests().iter().map(|r| r.wire()).map(|(k, t, _)| (k, t.into_owned())).collect()
+    }
+
+    fn menu(label: &str) -> MenuBar {
+        use crate::ui::{Menu, MenuEntry};
+        MenuBar::new(vec![Menu::new("Edit", vec![MenuEntry::command("edit.undo", label).into()])]).unwrap()
+    }
+
+    /// Kind 15, only when the menus changed, and again for a shell that restarts.
+    #[test]
+    fn menus_go_out_as_kind_15_when_they_change_and_again_on_a_restart() {
+        let platform = Platform::default();
+        platform.resend_chrome();
+        assert!(wired(&platform).is_empty(), "no menus yet, nothing to send again");
+        platform.set_menu(menu("Undo"));
+        let first = wired(&platform);
+        assert_eq!(first.len(), 1);
+        assert!(first.first().is_some_and(|(k, t)| *k == 15 && t.contains("\"edit.undo\"")), "{first:?}");
+        platform.set_menu(menu("Undo"));
+        assert!(wired(&platform).is_empty(), "unchanged");
+        platform.resend_chrome();
+        assert_eq!(wired(&platform), first, "the shell restarted");
+        platform.set_menu(menu("Undo Brush"));
+        assert_eq!(wired(&platform).len(), 1);
     }
 
     #[test]

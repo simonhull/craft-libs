@@ -127,6 +127,13 @@ public final class CraftCanvasView: UIView, UIGestureRecognizerDelegate, UIPenci
 
     override public var canBecomeFirstResponder: Bool { true }
 
+    /// The menu bar's items act here, after the canvas (and its text input, a subview) in the
+    /// responder chain; under SwiftUI the app delegate isn't in it. A shortcut's key press comes to
+    /// `pressesBegan` before any key command, and the canvas takes it for the app (⌘ and ⌃ presses
+    /// don't go on), so the menu's key command never runs it a second time.
+    private let menuResponder = CraftMenuResponder()
+    override public var next: UIResponder? { menuResponder.after(super.next) }
+
     override public func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
         super.pressesBegan(CraftKeys.forward(presses, pressed: true), with: event)
     }

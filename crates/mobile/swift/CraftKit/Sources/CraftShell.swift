@@ -42,6 +42,7 @@ public struct CraftShell: View {
     ///     canvas or a tool popover. Off by default, like `chrome`; the app hides its own versions,
     ///     and its own ways in to them (a menu item) can open the native one (`Platform::open_panel`).
     ///   - menus: the app's menus (`Platform::set_menu`) in the iPad menu bar and a toolbar menu.
+    ///     The app needs `@UIApplicationDelegateAdaptor(CraftMenuDelegate.self)` for the menu bar.
     ///   - rail: the app's rail panel (a tool palette) as a vertical rail at the leading edge.
     ///   - status: the app's status (`Platform::set_status`): messages as toasts, and progress.
     ///
@@ -87,7 +88,7 @@ public struct CraftShell: View {
             .background(Color.black)
             .overlay(alignment: .bottom) {
                 // While typing, the keyboard is the toolbar.
-                if chrome || nativePanels, !bridge.keyboardVisible { toolbar.padding(.bottom, 20).transition(.opacity) }
+                if chrome || nativePanels || menus, !bridge.keyboardVisible { toolbar.padding(.bottom, 20).transition(.opacity) }
             }
             .animation(.easeOut(duration: 0.2), value: bridge.keyboardVisible)
             .inspector(isPresented: Binding(get: { inspectorShown && isAvailable(inspector) }, set: { inspectorShown = $0 })) {
@@ -231,6 +232,7 @@ public struct CraftShell: View {
         GlassEffectContainer(spacing: 12) {
             HStack(spacing: 12) {
                 if chrome { chromeTools }
+                if menus { CraftShellMenus(menus: CraftMenus.shared) }
                 if nativePanels {
                     CraftPanelTools(bridge: bridge, openInspector: inspectorShown ? inspector : nil, popover: $popover, toggleInspector: toggleInspector)
                 }
@@ -280,6 +282,20 @@ public struct CraftShell: View {
 
     private func tool(_ label: String, _ symbol: String, action: @escaping () -> Void) -> some View {
         CraftToolButton(label: label, symbol: symbol, action: action)
+    }
+}
+
+/// The app's menus as a toolbar button in glass, while it has any. Only this view reads the menus,
+/// so a change to them redraws it alone.
+struct CraftShellMenus: View {
+    let menus: CraftMenus
+
+    var body: some View {
+        if !menus.bar.menus.isEmpty {
+            CraftMenuButton(menus: menus)
+                .padding(6)
+                .glassEffect(.regular.interactive(), in: .circle)
+        }
     }
 }
 

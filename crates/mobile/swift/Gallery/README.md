@@ -18,6 +18,12 @@ inspector would hold them. For each one:
 - **Edits Sent** lists every edit, newest first, as the JSON the app would receive through
   `craft_action`.
 
+**Chrome › menu_bar** puts the catalogue's menus in the iPad menu bar (`CraftMenuDelegate`) and
+the toolbar's menu button (`CraftMenuButton`), and logs what each sends. A view standing in for the
+canvas is first responder and logs every key press that reaches it, so a shortcut that ran twice
+would show twice. `GalleryUITests` presses the shortcuts on a simulated hardware keyboard and
+drives the toolbar menu: `xcodebuild test -project Gallery.xcodeproj -scheme Gallery -destination …`.
+
 ## Running it
 
 Needs Xcode 26 and [XcodeGen](https://github.com/yonaskolb/XcodeGen). The Xcode project is
