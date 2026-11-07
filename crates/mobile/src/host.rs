@@ -495,6 +495,13 @@ fn run_controls<A: CraftApp>(app: &mut A, ctx: &egui::Context, controls: &[Contr
                     }
                 }
             }
+            Control::Shell(features) => app.shell(ctx, features),
+            Control::Command(id) => {
+                if let Err(e) = app.command(ctx, id) {
+                    log::warn!("craft-mobile: command {id}: {e}");
+                }
+            }
+            Control::Shortcut(shortcut) => app.shortcut(ctx, shortcut),
             // Handled as it arrives (`HostOps::control`).
             Control::Ui(ui::Message::OpenPanels { .. }) => {}
         }
@@ -692,6 +699,12 @@ mod tests {
         fn snapshot(&self) -> Snapshot {
             Snapshot::default()
         }
+        fn shell(&mut self, _ctx: &egui::Context, features: &ui::ShellFeatures) {
+            self.0.push(format!("shell {}", features.iter().map(|f| f.to_string()).collect::<Vec<_>>().join(",")));
+        }
+        fn shortcut(&mut self, _ctx: &egui::Context, shortcut: &ui::Shortcut) {
+            self.0.push(format!("shortcut {shortcut}"));
+        }
         fn apply(&mut self, _ctx: &egui::Context, edit: &ui::Edit) -> Result<(), ui::EditError> {
             self.0.push(format!("apply {}", edit.control));
             if edit.control.as_str() == "bad" { Err("no".into()) } else { Ok(()) }
@@ -716,6 +729,20 @@ mod tests {
         let rejected = run_controls(&mut app, &ctx, &[edit("t"), Control::Action(crate::Action::Undo), edit("u")]);
         assert_eq!(app.0, ["apply t", "Undo", "apply u"]);
         assert!(!rejected);
+    }
+
+    /// The shell's declaration, a menu command and a shortcut reach the app in order; a command
+    /// the app doesn't handle itself runs as the parameterless `Action::Command` it was before.
+    #[test]
+    fn shell_commands_and_shortcuts_reach_the_app() {
+        let mut app = FakeApp(Vec::new());
+        let controls = [
+            Control::Shell(ui::ShellFeatures::from([ui::Feature::Menus, ui::Feature::Rail])),
+            Control::Command("edit.undo".into()),
+            Control::Shortcut("Cmd+Z".parse().unwrap()),
+        ];
+        assert!(!run_controls(&mut app, &egui::Context::default(), &controls));
+        assert_eq!(app.0, ["shell menus,rail", r#"Command { id: "edit.undo", params: Null }"#, "shortcut Cmd+Z"]);
     }
 
     #[test]

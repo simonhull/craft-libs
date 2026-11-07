@@ -41,18 +41,59 @@ macro_rules! number_id {
     };
 }
 
+/// Text-id newtype conveniences: `as_str`, `From<&str>`, `From<String>`, `AsRef<str>`, `Display`.
+macro_rules! id_newtype {
+    ($name:ident) => {
+        impl $name {
+            /// The id as text.
+            #[must_use]
+            pub fn as_str(&self) -> &str {
+                &self.0
+            }
+        }
+
+        impl From<&str> for $name {
+            fn from(s: &str) -> Self {
+                Self(s.to_owned())
+            }
+        }
+
+        impl From<String> for $name {
+            fn from(s: String) -> Self {
+                Self(s)
+            }
+        }
+
+        impl AsRef<str> for $name {
+            fn as_ref(&self) -> &str {
+                &self.0
+            }
+        }
+
+        impl std::fmt::Display for $name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str(&self.0)
+            }
+        }
+    };
+}
+
 mod catalogue;
+mod command;
 mod edit;
 mod node;
 mod publish;
+mod shell;
 
 pub use catalogue::{catalogue_json, catalogue_markdown};
+pub use command::{CommandId, Shortcut};
 pub use edit::{Edit, EditError, EditValue, GestureId, Message, Phase, Position, SelectMode};
 pub use node::{
     Choice, ChoiceOption, ControlId, ItemList, Node, Number, Panel, PanelId, PanelInfo, PanelRole, Row, RowId, Scale, Section, Toggle, Unit,
 };
 pub(crate) use publish::PanelsState;
 use publish::Published;
+pub use shell::{Feature, ShellFeatures, UnknownFeature};
 
 /// A node that can't be built as asked.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
@@ -100,5 +141,11 @@ pub enum UiError {
         list: ControlId,
         /// The repeated row id.
         row: RowId,
+    },
+    /// A shortcut that isn't in the portable form (`Cmd+Shift+Z`).
+    #[error("`{shortcut}` isn't a shortcut: modifiers (Ctrl, Cmd, Alt, Shift), then one key, joined by `+`")]
+    BadShortcut {
+        /// The text given.
+        shortcut: String,
     },
 }

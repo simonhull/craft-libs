@@ -17,6 +17,9 @@ public struct CraftShell: View {
     let pencil: CraftPencilActions
     let chrome: Bool
     let nativePanels: Bool
+    let menus: Bool
+    let rail: Bool
+    let status: Bool
 
     @State private var bridge = CraftBridge.shared
     /// What the inspector shows; kept when it closes, so it slides away with its contents.
@@ -38,13 +41,32 @@ public struct CraftShell: View {
     ///   - nativePanels: the app's native panels, each a toolbar button: an inspector beside the
     ///     canvas or a tool popover. Off by default, like `chrome`; the app hides its own versions,
     ///     and its own ways in to them (a menu item) can open the native one (`Platform::open_panel`).
-    public init(documentTypes: [UTType], drawing: CraftDrawingInput = .anyTouch, colorSpace: CraftColorSpace = .sRGB, pencil: CraftPencilActions = CraftPencilActions(), chrome: Bool = false, nativePanels: Bool = false) {
+    ///   - menus: the app's menus (`Platform::set_menu`) in the iPad menu bar and a toolbar menu.
+    ///   - rail: the app's rail panel (a tool palette) as a vertical rail at the leading edge.
+    ///   - status: the app's status (`Platform::set_status`): messages as toasts, and progress.
+    ///
+    /// The app hears which of these the shell draws (`CraftApp::shell`) whenever the canvas starts it.
+    public init(
+        documentTypes: [UTType], drawing: CraftDrawingInput = .anyTouch, colorSpace: CraftColorSpace = .sRGB,
+        pencil: CraftPencilActions = CraftPencilActions(), chrome: Bool = false, nativePanels: Bool = false,
+        menus: Bool = false, rail: Bool = false, status: Bool = false
+    ) {
         self.chrome = chrome
         self.nativePanels = nativePanels
+        self.menus = menus
+        self.rail = rail
+        self.status = status
+        // Before the canvas starts the app, which hears them first thing (`CraftBridge.started`).
+        CraftBridge.shared.features = Self.features(nativePanels: nativePanels, menus: menus, rail: rail, status: status)
         self.documentTypes = documentTypes
         self.drawing = drawing
         self.colorSpace = colorSpace
         self.pencil = pencil
+    }
+
+    /// The features the flags turn on.
+    static func features(nativePanels: Bool, menus: Bool, rail: Bool, status: Bool) -> [CraftFeature] {
+        [(nativePanels, CraftFeature.panels), (menus, .menus), (rail, .rail), (status, .status)].filter(\.0).map(\.1)
     }
 
     private var opensImages: Bool { documentTypes.contains { $0.conforms(to: .image) } }

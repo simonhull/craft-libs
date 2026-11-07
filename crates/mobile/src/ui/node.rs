@@ -18,42 +18,6 @@ pub struct PanelId(String);
 #[serde(transparent)]
 pub struct ControlId(String);
 
-macro_rules! id_newtype {
-    ($name:ident) => {
-        impl $name {
-            /// The id as text.
-            #[must_use]
-            pub fn as_str(&self) -> &str {
-                &self.0
-            }
-        }
-
-        impl From<&str> for $name {
-            fn from(s: &str) -> Self {
-                Self(s.to_owned())
-            }
-        }
-
-        impl From<String> for $name {
-            fn from(s: String) -> Self {
-                Self(s)
-            }
-        }
-
-        impl AsRef<str> for $name {
-            fn as_ref(&self) -> &str {
-                &self.0
-            }
-        }
-
-        impl std::fmt::Display for $name {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                f.write_str(&self.0)
-            }
-        }
-    };
-}
-
 id_newtype!(PanelId);
 id_newtype!(ControlId);
 

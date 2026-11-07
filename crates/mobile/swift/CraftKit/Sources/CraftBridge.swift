@@ -189,10 +189,30 @@ public final class CraftBridge {
         openRequest = nil
     }
 
-    /// The canvas started the app: tell it which panels are on screen, in case the shell said so
-    /// before the app was there to hear it.
+    /// What the shell draws itself (its flags), said to the app each time the canvas starts it.
+    /// Set by the shell before the canvas starts; not observed.
+    @ObservationIgnored var features: [CraftFeature] = []
+
+    /// The canvas started the app: tell it what the shell draws, then which panels are on screen,
+    /// in case the shell said so before the app was there to hear it.
     func started() {
+        send(.shell(features))
         sayShowing()
+    }
+
+    /// Run one of the app's commands as its menu item does (a native menu, the rail, Cancel).
+    public func command(_ id: String) {
+        send(.command(id))
+    }
+
+    /// A shortcut chosen from a native menu (`Cmd+Shift+Z`), for the app's own key handling.
+    public func shortcut(_ keys: String) {
+        send(.shortcut(keys))
+    }
+
+    private func send(_ message: CraftChromeMessage) {
+        guard let json = try? JSONEncoder().encode(message) else { return }
+        send(json: json)
     }
 
     private func sayShowing() {

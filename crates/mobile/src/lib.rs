@@ -114,6 +114,31 @@ pub trait CraftApp: eframe::App + 'static {
         Err("this app has no native panels".into())
     }
 
+    /// The shell started and draws these parts of the chrome itself ([`ui::Feature`]): hide the
+    /// app's own versions. Runs inside the frame, before `logic`; a shell that restarts says it
+    /// again, and the app hears it again. Nothing by default.
+    fn shell(&mut self, ctx: &egui::Context, features: &ui::ShellFeatures) {
+        let _ = (ctx, features);
+    }
+
+    /// Run one of the app's commands as its menu item does (a native menu, the rail, a Cancel
+    /// button). Runs inside the frame, before `logic`.
+    ///
+    /// By default it is an [`Action::Command`] without parameters, as shells sent commands before.
+    ///
+    /// # Errors
+    /// Why the command could not run (logged).
+    fn command(&mut self, ctx: &egui::Context, id: &ui::CommandId) -> Result<(), String> {
+        self.action(ctx, &Action::Command { id: id.to_string(), params: serde_json::Value::Null })
+    }
+
+    /// A shortcut chosen from a native menu, delivered as the key press rather than its command,
+    /// so the app's own key handling decides what it does (as a hardware key would). Runs inside
+    /// the frame, before `logic`. Nothing by default.
+    fn shortcut(&mut self, ctx: &egui::Context, shortcut: &ui::Shortcut) {
+        let _ = (ctx, shortcut);
+    }
+
     /// The app is leaving the screen and the OS may terminate it without warning: start writing
     /// recovery data for unsaved work now, on workers, and return at once. The shells call this
     /// on the thread the OS watches (iPadOS ends apps whose main thread hangs; Android's `onStop`
