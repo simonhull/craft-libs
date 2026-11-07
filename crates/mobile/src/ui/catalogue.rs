@@ -83,9 +83,9 @@ fn examples() -> Vec<Primitive> {
     });
     out.push(Primitive {
         name: "item_list",
-        about: "Rows of items such as layers, top to bottom: tap to select, swipe to hide, long-press to rename, drag to reorder.",
+        about: "Rows of items such as layers, top to bottom: tap to select, swipe to hide, long-press to rename, drag to reorder. Select in the header picks several rows, tap by tap, until Done; with a keyboard, Shift-tap selects a range and Command-tap adds or removes a row.",
         fields: "each row's `id` is the app's own and unique in the list; `depth` indents it (inside groups); `visible: null` means it can't be hidden; `reorderable` allows dragging.",
-        sends: "`select`, `set_visible`, `rename` and (when reorderable) `move` edits, each one `commit`, naming rows by their `id`.",
+        sends: "`select`, `set_visible`, `rename` and (when reorderable) `move` edits, each one `commit`, naming rows by their `id`. A `select` has a `mode`: `replace` (a plain tap; also when left out), `toggle` (add the row or take it out) or `range` (from the last row selected to this one). A `move` names the row dragged; an app moves the whole selection when that row is one of several selected.",
         example: Node::ItemList(
             ItemList::new("layers", vec![Row::new(2, "Sky").subtitle("Pixel").visible(Some(true)).selected(true), Row::new(1, "Background").subtitle("Pixel").visible(Some(true))])
                 .reorderable(true),

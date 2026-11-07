@@ -1,7 +1,9 @@
 import SwiftUI
 
 /// Rows of items such as layers: tap to select, swipe or tap the eye to hide, long-press to rename,
-/// drag to reorder (when `reorderable`).
+/// drag to reorder (when `reorderable`). Select (in the header) picks several rows, a tap adding or
+/// removing each, until Done; with a hardware keyboard, Command-tap does the same and Shift-tap
+/// selects a range. Selected rows are tinted.
 struct CraftItemListView: View {
     let id: String
     let rows: [CraftRow]
@@ -10,6 +12,8 @@ struct CraftItemListView: View {
     let send: @MainActor (CraftEdit) -> Void
     @State private var renaming: CraftRow?
     @State private var newName = ""
+    /// Picking several rows: every tap adds or removes one.
+    @State private var multiSelecting = false
 
     var body: some View {
         Section {
@@ -17,6 +21,18 @@ struct CraftItemListView: View {
                 rowView(row)
             }
             .onMove(perform: reorderable ? { source, destination in move(from: source, to: destination) } : nil)
+        } header: {
+            if rows.count > 1 {
+                HStack {
+                    Spacer()
+                    Button(multiSelecting ? "Done" : "Select") {
+                        withAnimation { multiSelecting.toggle() }
+                    }
+                    .font(.subheadline.weight(multiSelecting ? .semibold : .regular))
+                    .textCase(nil)
+                    .accessibilityHint(multiSelecting ? "Stop picking rows" : "Pick several rows")
+                }
+            }
         }
         .alert("Rename", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
             TextField("Name", text: $newName)
@@ -27,6 +43,11 @@ struct CraftItemListView: View {
 
     private func rowView(_ row: CraftRow) -> some View {
         HStack {
+            if multiSelecting {
+                Image(systemName: row.selected ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(row.selected ? Color.accentColor : .secondary)
+                    .accessibilityHidden(true)
+            }
             if let visible = row.visible {
                 Button { one(.setVisible(row: row.id, visible: !visible)) } label: {
                     Image(systemName: visible ? "eye" : "eye.slash")
@@ -44,7 +65,7 @@ struct CraftItemListView: View {
             Spacer()
         }
         .contentShape(Rectangle())
-        .onTapGesture { one(.select(row: row.id)) }
+        .modifiedTap { select(row, modifiers: $0) }
         .listRowBackground(row.selected ? Color.accentColor.opacity(0.18) : nil)
         .swipeActions(edge: .trailing) {
             if let visible = row.visible {
@@ -56,9 +77,22 @@ struct CraftItemListView: View {
         }
         .modifier(RowAccessibility(
             row: row,
-            select: { one(.select(row: row.id)) },
+            select: { select(row, modifiers: []) },
             setVisible: { one(.setVisible(row: row.id, visible: $0)) },
             rename: { startRenaming(row) }))
+    }
+
+    private func select(_ row: CraftRow, modifiers: EventModifiers) {
+        one(.select(row: row.id, mode: Self.selectMode(multiSelecting: multiSelecting, modifiers: modifiers)))
+    }
+
+    /// How a tap with `modifiers` held changes the selection: Command adds or removes the row (and
+    /// wins over Shift, as on the desktop), Shift selects a range, a plain tap selects the row alone,
+    /// or adds or removes it while picking several.
+    nonisolated static func selectMode(multiSelecting: Bool, modifiers: EventModifiers) -> CraftEdit.SelectMode {
+        if modifiers.contains(.command) { return .toggle }
+        if modifiers.contains(.shift) { return .range }
+        return multiSelecting ? .toggle : .replace
     }
 
     private func startRenaming(_ row: CraftRow) {
@@ -92,6 +126,38 @@ struct CraftItemListView: View {
         return .move(row: row.id, target: last.id, position: .below)
     }
 }
+
+extension View {
+    /// A tap, with the hardware keyboard's modifier keys held for it. SwiftUI's taps don't carry them
+    /// on iOS (`Gesture.modifiers` is macOS only), so a UIKit tap recognizer reads them there.
+    func modifiedTap(_ action: @escaping (EventModifiers) -> Void) -> some View {
+        #if os(iOS)
+            gesture(ModifiedTap(action: action))
+        #else
+            onTapGesture { action([]) }
+        #endif
+    }
+}
+
+#if os(iOS)
+    /// A UIKit tap: its event's modifier flags, which a SwiftUI tap lacks.
+    private struct ModifiedTap: UIGestureRecognizerRepresentable {
+        let action: (EventModifiers) -> Void
+
+        func makeUIGestureRecognizer(context: Context) -> UITapGestureRecognizer {
+            UITapGestureRecognizer()
+        }
+
+        func handleUIGestureRecognizerAction(_ recognizer: UITapGestureRecognizer, context: Context) {
+            guard recognizer.state == .ended else { return }
+            let flags = recognizer.modifierFlags
+            var held: EventModifiers = []
+            if flags.contains(.command) { held.insert(.command) }
+            if flags.contains(.shift) { held.insert(.shift) }
+            action(held)
+        }
+    }
+#endif
 
 /// One VoiceOver element per row: activating it selects the row; hiding and renaming are named actions.
 private struct RowAccessibility: ViewModifier {

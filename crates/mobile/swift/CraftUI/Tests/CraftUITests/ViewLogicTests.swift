@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import Testing
 @testable import CraftUI
 
@@ -118,6 +119,18 @@ import Testing
         #expect(CraftItemListView.moveEdit(Self.rows, from: [1], to: 2) == nil)
         #expect(CraftItemListView.moveEdit(Self.rows, from: [2], to: 3) == nil)
         #expect(CraftItemListView.moveEdit(Self.rows, from: [7], to: 0) == nil)
+    }
+
+    /// A plain tap selects one row; in multi-select every tap adds or removes one; with a keyboard,
+    /// Command-tap adds or removes and Shift-tap selects a range, as the desktop's Layers panel does.
+    @Test func aTapSelectsByModeAndModifiers() {
+        #expect(CraftItemListView.selectMode(multiSelecting: false, modifiers: []) == .replace)
+        #expect(CraftItemListView.selectMode(multiSelecting: true, modifiers: []) == .toggle)
+        #expect(CraftItemListView.selectMode(multiSelecting: false, modifiers: .command) == .toggle)
+        #expect(CraftItemListView.selectMode(multiSelecting: false, modifiers: .shift) == .range)
+        #expect(CraftItemListView.selectMode(multiSelecting: true, modifiers: .shift) == .range)
+        #expect(CraftItemListView.selectMode(multiSelecting: false, modifiers: [.command, .shift]) == .toggle, "Command wins, as on the desktop")
+        #expect(CraftItemListView.selectMode(multiSelecting: false, modifiers: .option) == .replace)
     }
 
     @Test func nodesWithTheSameIdStillGetTheirOwnViews() {

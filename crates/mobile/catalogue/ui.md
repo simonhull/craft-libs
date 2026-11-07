@@ -127,7 +127,7 @@ A titled group of other nodes; the user can collapse it.
 
 ## `item_list`
 
-Rows of items such as layers, top to bottom: tap to select, swipe to hide, long-press to rename, drag to reorder.
+Rows of items such as layers, top to bottom: tap to select, swipe to hide, long-press to rename, drag to reorder. Select in the header picks several rows, tap by tap, until Done; with a keyboard, Shift-tap selects a range and Command-tap adds or removes a row.
 
 **Fields:** each row's `id` is the app's own and unique in the list; `depth` indents it (inside groups); `visible: null` means it can't be hidden; `reorderable` allows dragging.
 
@@ -157,7 +157,7 @@ Rows of items such as layers, top to bottom: tap to select, swipe to hide, long-
 }
 ```
 
-**Sends:** `select`, `set_visible`, `rename` and (when reorderable) `move` edits, each one `commit`, naming rows by their `id`.
+**Sends:** `select`, `set_visible`, `rename` and (when reorderable) `move` edits, each one `commit`, naming rows by their `id`. A `select` has a `mode`: `replace` (a plain tap; also when left out), `toggle` (add the row or take it out) or `range` (from the last row selected to this one). A `move` names the row dragged; an app moves the whole selection when that row is one of several selected.
 
 For example:
 

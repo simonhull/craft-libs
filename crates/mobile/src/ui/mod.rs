@@ -47,7 +47,7 @@ mod node;
 mod publish;
 
 pub use catalogue::{catalogue_json, catalogue_markdown};
-pub use edit::{Edit, EditError, EditValue, GestureId, Message, Phase, Position};
+pub use edit::{Edit, EditError, EditValue, GestureId, Message, Phase, Position, SelectMode};
 pub use node::{
     Choice, ChoiceOption, ControlId, ItemList, Node, Number, Panel, PanelId, PanelInfo, PanelRole, Row, RowId, Scale, Section, Toggle, Unit,
 };

@@ -126,7 +126,9 @@ enum JSONValue: Decodable, Equatable {
 
     @Test func rowEditsEncodeAsRustReadsThem() throws {
         let edits: [(CraftEdit.Value, String)] = [
-            (.select(row: 2), #"{"kind":"select","value":{"row":2}}"#),
+            (.select(row: 2), #"{"kind":"select","value":{"row":2,"mode":"replace"}}"#),
+            (.select(row: 2, mode: .toggle), #"{"kind":"select","value":{"row":2,"mode":"toggle"}}"#),
+            (.select(row: 2, mode: .range), #"{"kind":"select","value":{"row":2,"mode":"range"}}"#),
             (.setVisible(row: 2, visible: false), #"{"kind":"set_visible","value":{"row":2,"visible":false}}"#),
             (.rename(row: 4, name: "Sky"), #"{"kind":"rename","value":{"row":4,"name":"Sky"}}"#),
             (.move(row: 4, target: 9, position: .below), #"{"kind":"move","value":{"row":4,"target":9,"position":"below"}}"#),

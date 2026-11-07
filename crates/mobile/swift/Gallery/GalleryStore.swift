@@ -133,8 +133,16 @@ extension [CraftRow] {
     /// The rows after a list edit.
     func applying(_ value: CraftEdit.Value, reorderable: Bool) -> [CraftRow] {
         switch value {
-        case let .select(row):
+        case let .select(row, .replace):
             return map { $0.with(selected: $0.id == row) }
+        case let .select(row, .toggle):
+            return map { $0.id == row ? $0.with(selected: !$0.selected) : $0 }
+        case let .select(row, .range):
+            // From the first row selected (the Gallery keeps no anchor) to this one.
+            guard let to = firstIndex(where: { $0.id == row }) else { return self }
+            let from = firstIndex(where: \.selected) ?? to
+            let span = Swift.min(from, to)...Swift.max(from, to)
+            return enumerated().map { $1.with(selected: span.contains($0)) }
         case let .setVisible(row, visible):
             return map { $0.id == row && $0.visible != nil ? $0.with(visible: visible) : $0 }
         case let .rename(row, name):

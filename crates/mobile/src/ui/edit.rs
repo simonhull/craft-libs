@@ -28,6 +28,19 @@ pub enum Position {
     Below,
 }
 
+/// How selecting a row changes the selection.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SelectMode {
+    /// Select the row alone (a plain tap).
+    #[default]
+    Replace,
+    /// Add the row to the selection, or take it out (multi-select, a Command-tap).
+    Toggle,
+    /// Select every row from the last one selected to this one (a Shift-tap).
+    Range,
+}
+
 /// The value an edit carries, by the kind of control.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "value", rename_all = "snake_case")]
@@ -42,6 +55,9 @@ pub enum EditValue {
     Select {
         /// The row's id.
         row: RowId,
+        /// How the tap changes the selection; [`SelectMode::Replace`] when the shell doesn't say.
+        #[serde(default)]
+        mode: SelectMode,
     },
     /// A row's eye was toggled.
     SetVisible {
@@ -159,6 +175,22 @@ mod tests {
         assert_eq!(v, EditValue::Move { row: 4.into(), target: 9.into(), position: Position::Below });
         let v: EditValue = serde_json::from_value(json!({"kind": "rename", "value": {"row": 4, "name": "Sky"}})).unwrap();
         assert_eq!(v, EditValue::Rename { row: 4.into(), name: "Sky".into() });
+    }
+
+    /// A select says how it changes the selection; a shell that doesn't say replaces it.
+    #[test]
+    fn a_select_carries_its_mode_and_defaults_to_replace() {
+        let parse = |v: serde_json::Value| serde_json::from_value::<EditValue>(json!({"kind": "select", "value": v})).unwrap();
+        assert_eq!(parse(json!({"row": 4})), EditValue::Select { row: 4.into(), mode: SelectMode::Replace });
+        assert_eq!(parse(json!({"row": 4, "mode": "replace"})), EditValue::Select { row: 4.into(), mode: SelectMode::Replace });
+        assert_eq!(parse(json!({"row": 4, "mode": "toggle"})), EditValue::Select { row: 4.into(), mode: SelectMode::Toggle });
+        assert_eq!(parse(json!({"row": 4, "mode": "range"})), EditValue::Select { row: 4.into(), mode: SelectMode::Range });
+        assert!(serde_json::from_value::<EditValue>(json!({"kind": "select", "value": {"row": 4, "mode": "lasso"}})).is_err());
+        assert_eq!(SelectMode::default(), SelectMode::Replace);
+        assert_eq!(
+            serde_json::to_value(EditValue::Select { row: 4.into(), mode: SelectMode::Toggle }).unwrap(),
+            json!({"kind": "select", "value": {"row": 4, "mode": "toggle"}})
+        );
     }
 
     /// Exactly what the Swift `CraftEdit` encodes for a row's eye.
