@@ -14,7 +14,8 @@ public struct CraftStatus: Decodable, Equatable, Sendable {
 
         public let text: String
         public let tone: Tone
-        /// A new id shows the same text again (`Status::message_id`); 0 when the app doesn't say.
+        /// Which message this is (`Status::message_id`): a new id shows the same text again, and the
+        /// same id with new text (a countdown) updates the toast on screen. 0 when the app doesn't say.
         public let id: UInt64
 
         public init(text: String, tone: Tone = .info, id: UInt64 = 0) {
@@ -59,15 +60,27 @@ public struct CraftStatus: Decodable, Equatable, Sendable {
     }
 }
 
-/// The app's status over the canvas: a new message (new text, tone or id) as a toast at the top that goes away by itself
+/// The app's status over the canvas: a new message as a toast at the top that goes away by itself
 /// (an error, tinted red, stays longer; a tap dismisses it), and a job's progress as a capsule with
 /// Cancel at the bottom while it lasts. Cancel sends the job's command with `command`.
+///
+/// A message with an id keeps its toast while the id stands: new text (a countdown) changes it in
+/// place, without animating it in again, and starts its time again. A new id is a new toast. A
+/// message without an id is its text and tone.
 public struct CraftStatusView: View {
     let status: CraftStatus
     let command: @MainActor (String) -> Void
     /// The message on screen; the same message arriving again doesn't show again.
     @State private var toast: CraftStatus.Message?
-    @State private var dismissed: CraftStatus.Message?
+    @State private var dismissed: Identity?
+
+    /// Which toast a message is (``identity(_:)``).
+    enum Identity: Hashable {
+        /// The app's id for it.
+        case numbered(UInt64)
+        /// No id: its text and tone.
+        case unnumbered(String, CraftStatus.Message.Tone)
+    }
 
     public init(status: CraftStatus, command: @escaping @MainActor (String) -> Void) {
         (self.status, self.command) = (status, command)
@@ -77,6 +90,8 @@ public struct CraftStatusView: View {
         VStack {
             if let toast {
                 CraftStatusToast(message: toast)
+                    // A new message is a new view, animated in; new text for the same one isn't.
+                    .id(Self.identity(toast))
                     .padding(.top, 20)
                     .padding(.horizontal, 20)
                     .onTapGesture { dismiss() }
@@ -94,7 +109,7 @@ public struct CraftStatusView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .animation(.easeOut(duration: 0.25), value: toast)
+        .animation(.easeOut(duration: 0.25), value: toast.map(Self.identity))
         .animation(.easeOut(duration: 0.25), value: status.progress)
         .onChange(of: status.message, initial: true) { _, message in
             // Cleared, the same message may come back as news.
@@ -104,7 +119,7 @@ public struct CraftStatusView: View {
     }
 
     private func dismiss() {
-        dismissed = toast
+        dismissed = toast.map(Self.identity)
         toast = nil
     }
 
@@ -113,10 +128,17 @@ public struct CraftStatusView: View {
         tone == .error ? 6 : 3
     }
 
-    /// The toast for the status's `message`: none once that very message was dismissed (it timed
-    /// out or was tapped away), so only a new one shows.
-    nonisolated static func shown(_ message: CraftStatus.Message?, dismissed: CraftStatus.Message?) -> CraftStatus.Message? {
-        message == dismissed ? nil : message
+    /// Which toast `message` is: its id when it has one, so new text updates the toast on screen;
+    /// otherwise its text and tone.
+    nonisolated static func identity(_ message: CraftStatus.Message) -> Identity {
+        message.id == 0 ? .unnumbered(message.text, message.tone) : .numbered(message.id)
+    }
+
+    /// The toast for the status's `message`: none once that message was dismissed (it timed out or
+    /// was tapped away), whatever its text says since, so only a new one shows.
+    nonisolated static func shown(_ message: CraftStatus.Message?, dismissed: Identity?) -> CraftStatus.Message? {
+        guard let message, identity(message) != dismissed else { return nil }
+        return message
     }
 }
 

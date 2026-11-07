@@ -29,7 +29,9 @@ would show twice. `GalleryUITests` presses the shortcuts on a simulated hardware
 drives the toolbar menu: `xcodebuild test -project Gallery.xcodeproj -scheme Gallery -destination …`.
 
 **Chrome › status** shows the catalogue's status over the detail, as the shell shows it over the
-canvas, with buttons that set a new message or a job; Cancel is logged.
+canvas, with buttons that set a new message or a job; Cancel is logged. **Countdown** says "retrying in
+N s" each second under one id, as PhotoCraft does while its scratch disk is low: one toast whose text
+changes in place, and that stays away once tapped away.
 
 ## Running it
 

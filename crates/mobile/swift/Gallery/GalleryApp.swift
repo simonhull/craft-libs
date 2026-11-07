@@ -242,15 +242,18 @@ struct GalleryRail: View {
 struct GalleryStatusDetail: View {
     let about: String
     @Bindable var store: GalleryStore
+    /// The countdown's ticks: one message, its text changing each second.
+    @State private var countdown: Task<Void, Never>?
 
     var body: some View {
         List {
             Section { Text(about) }
             Section("The App Says") {
-                Button("Saved") { store.status = CraftStatus(message: .init(text: "Saved a.psd"), progress: store.status.progress) }
-                Button("Error") { store.status = CraftStatus(message: .init(text: "Couldn't open b.psd: not a Photoshop file", tone: .error), progress: store.status.progress) }
+                Button("Saved") { say(.init(text: "Saved a.psd")) }
+                Button("Error") { say(.init(text: "Couldn't open b.psd: not a Photoshop file", tone: .error)) }
                 Button("Start a Job") { store.status = CraftStatus(message: store.status.message, progress: .init(label: "Exporting a.png", fraction: 0.4, cancel: "job.cancel")) }
                 Button("Finish the Job") { store.status = CraftStatus(message: store.status.message) }
+                Button("Countdown") { startCountdown() }
             }
             Section("Sent") {
                 ForEach(store.log) { sent in
@@ -261,6 +264,28 @@ struct GalleryStatusDetail: View {
         .navigationTitle("status")
         .overlay {
             CraftStatusView(status: store.status) { store.logMessage(CraftChromeMessage.command($0)) }
+        }
+        .onDisappear { countdown?.cancel() }
+    }
+
+    /// A new message, which ends the countdown.
+    private func say(_ message: CraftStatus.Message) {
+        countdown?.cancel()
+        store.status = CraftStatus(message: message, progress: store.status.progress)
+    }
+
+    /// "Retrying in 9 s" down to 1 s, as PhotoCraft says while its scratch disk is low: one message
+    /// (one id) whose text changes, so one toast that updates in place.
+    private func startCountdown() {
+        countdown?.cancel()
+        let id = UInt64(Date().timeIntervalSince1970 * 1000)
+        countdown = Task { @MainActor in
+            for left in stride(from: 9, through: 1, by: -1) {
+                let message = CraftStatus.Message(text: "Scratch disk low, retrying in \(left) s", tone: .error, id: id)
+                store.status = CraftStatus(message: message, progress: store.status.progress)
+                try? await Task.sleep(for: .seconds(1))
+                if Task.isCancelled { return }
+            }
         }
     }
 }

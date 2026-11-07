@@ -37,8 +37,9 @@ impl Status {
     }
 
     /// Number the message, so the same text said again shows again: give each new message a new
-    /// id (a counter of the app's), and keep it while the message stands. Without one (0), a
-    /// message shows when its text or tone changes.
+    /// id (a counter of the app's), and keep it while the message stands. New text with the same id
+    /// (a countdown: "retrying in 3 s", "in 2 s") updates the message on screen in place, and a
+    /// message dismissed stays so. Without one (0), a message shows when its text or tone changes.
     #[must_use]
     pub fn message_id(mut self, id: u64) -> Self {
         if let Some(message) = &mut self.message {
@@ -66,8 +67,9 @@ impl Status {
 pub struct StatusMessage {
     text: String,
     tone: Tone,
-    /// Tells the same text said again apart from it still being said: the shell shows a message
-    /// again when its text, tone or id changes. 0 when left out.
+    /// Tells the same text said again apart from it still being said: the shell shows a new id as
+    /// a new message, and new text with the same id as that message updated. 0 when left out: then
+    /// new text or tone is a new message.
     #[serde(default)]
     id: u64,
 }

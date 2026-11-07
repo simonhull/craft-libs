@@ -196,7 +196,7 @@ fn chrome() -> Vec<Chrome> {
     let status = Chrome {
         name: "status",
         about: "What the app is telling the user: a message as a transient toast at the top (red for an error), and a long job as a progress capsule with a Cancel button. `Platform::set_status` sends it whenever it changes (request kind 16), and again when the shell restarts.",
-        fields: "`message` (`null` for none): its `text`, its `tone` (`info` or `error`) and an `id` (0 when left out). A message shows when its text, tone or id changes; give each new message a new id (`Status::message_id`) so the same text said again shows again. `progress` (`null` for none): a `label`, a `fraction` from 0 to 1 (`null` while unknown) and `cancel`, a command id or `null` for a job that can't be stopped.",
+        fields: "`message` (`null` for none): its `text`, its `tone` (`info` or `error`) and an `id` (0 when left out). Give each new message a new id (`Status::message_id`) so the same text said again shows again, and keep the id while the message stands: new text with the same id (a countdown) updates the toast on screen in place, without showing it again, and a toast the user dismissed stays dismissed. Without an id (0), a message shows when its text or tone changes. `progress` (`null` for none): a `label`, a `fraction` from 0 to 1 (`null` while unknown) and `cancel`, a command id or `null` for a job that can't be stopped.",
         kind: 16,
         sends: "the `cancel` command when the user taps Cancel.",
         example: ChromeExample::Status(example_status()),
