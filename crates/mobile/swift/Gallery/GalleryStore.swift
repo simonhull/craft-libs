@@ -34,8 +34,9 @@ final class GalleryStore {
     /// The edits sent, newest first.
     private(set) var log: [Sent] = []
     private var sentCount = 0
-    /// The examples before each drag in progress, by gesture: a cancelled drag puts them back.
-    private var beforeGesture: [UInt64: [Entry]] = [:]
+    /// Each drag in progress, by gesture: its control and the value it started from, which a
+    /// cancelled drag puts back (and nothing else: other controls may have changed meanwhile).
+    private var drags: [UInt64: (control: String, from: CraftEdit.Value)] = [:]
 
     init() {
         do {
@@ -72,14 +73,20 @@ final class GalleryStore {
         }
         switch edit.phase {
         case .begin:
-            beforeGesture[edit.gesture] = entries
-        case .change, .commit:
-            for index in entries.indices {
-                entries[index].example = entries[index].example.applying(edit.value, to: edit.control)
+            if let from = entries.lazy.compactMap({ $0.example.value(of: edit.control) }).first {
+                drags[edit.gesture] = (edit.control, from)
             }
-            if edit.phase == .commit { beforeGesture[edit.gesture] = nil }
+        case .change, .commit:
+            apply(edit.value, to: edit.control)
+            if edit.phase == .commit { drags[edit.gesture] = nil }
         case .cancel:
-            if let before = beforeGesture.removeValue(forKey: edit.gesture) { entries = before }
+            if let drag = drags.removeValue(forKey: edit.gesture) { apply(drag.from, to: drag.control) }
+        }
+    }
+
+    private func apply(_ value: CraftEdit.Value, to control: String) {
+        for index in entries.indices {
+            entries[index].example = entries[index].example.applying(value, to: control)
         }
     }
 
@@ -89,6 +96,17 @@ final class GalleryStore {
 }
 
 extension CraftNode {
+    /// The value of the control `control` (looked for inside sections too), as an edit would carry it.
+    func value(of control: String) -> CraftEdit.Value? {
+        switch self {
+        case let .section(_, _, _, children): children.lazy.compactMap { $0.value(of: control) }.first
+        case let .number(id, _, value, _, _, _, _, _) where id == control: .number(value)
+        case let .toggle(id, _, value, _) where id == control: .toggle(value)
+        case let .choice(id, _, value, _, _) where id == control: .choice(value)
+        default: nil
+        }
+    }
+
     /// The node with an edit's value applied to the control `control` (looked for inside sections
     /// too), as an app would describe it next. Other nodes, and edits that don't fit, change nothing.
     func applying(_ value: CraftEdit.Value, to control: String) -> CraftNode {

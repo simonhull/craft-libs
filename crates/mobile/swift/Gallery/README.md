@@ -12,9 +12,9 @@ The sidebar lists each primitive, plus **Everything**: all examples in one panel
 inspector would hold them. For each one:
 
 - The panel is in the **inspector** column, as `CraftShell` shows an inspector
-  panel; the toolbar's **Popover** button shows it as a tool popover instead.
+  panel; the toolbar's **Popover** button shows it as a tool popover (`CraftPopover`), as the shell shows a tool panel.
 - The Gallery plays the app: each edit is applied to its own copy of the example, so the controls
-  respond, and a cancelled drag puts the value back.
+  respond, and a cancelled drag puts that control's value back.
 - **Edits Sent** lists every edit, newest first, as the JSON the app would receive through
   `craft_action`.
 

@@ -80,7 +80,7 @@ struct GalleryDetail: View {
                     .disabled(store.log.isEmpty)
                 Button("Popover", systemImage: "rectangle.on.rectangle") { showsPopover.toggle() }
                     .popover(isPresented: $showsPopover) {
-                        GalleryPopover { CraftPanelView(panel: panel(.tool), send: store.send) }
+                        CraftPopover { CraftPanelView(panel: panel(.tool), send: store.send) }
                     }
                 Button("Inspector", systemImage: "sidebar.trailing") { showsInspector.toggle() }
             }
@@ -91,25 +91,5 @@ struct GalleryDetail: View {
             }
             .inspectorColumnWidth(min: 280, ideal: 320, max: 400)
         }
-    }
-}
-
-/// A panel in a popover sized to its contents, as CraftShell's `CraftPopoverPanel` shows tool
-/// panels (CraftShell needs the Rust host, so the Gallery has its own copy).
-struct GalleryPopover<Content: View>: View {
-    @ViewBuilder let content: Content
-    @State private var height: CGFloat = 360
-
-    var body: some View {
-        NavigationStack {
-            content
-                .navigationBarTitleDisplayMode(.inline)
-                .scrollBounceBehavior(.basedOnSize)
-                .onScrollGeometryChange(for: CGFloat.self) { $0.contentSize.height + $0.contentInsets.top + $0.contentInsets.bottom } action: { _, new in
-                    height = new
-                }
-        }
-        .frame(idealWidth: 340, idealHeight: min(max(height, 120), 640))
-        .presentationCompactAdaptation(.popover)
     }
 }
