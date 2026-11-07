@@ -112,12 +112,16 @@ impl ToolPalette {
     /// A palette of `slots`, top to bottom, with `selected` the current tool.
     ///
     /// # Errors
-    /// [`UiError::EmptySlot`] for a slot without tools, [`UiError::DuplicateTool`] for a tool id
+    /// [`UiError::EmptySlot`] for a slot without tools, [`UiError::EmptyLabel`] for a tool without a
+    /// label (a screen reader reads it), [`UiError::DuplicateTool`] for a tool id
     /// that appears twice, and [`UiError::UnknownTool`] when `selected` isn't one of them.
     pub fn new(id: impl Into<ControlId>, slots: Vec<ToolSlot>, selected: impl Into<ToolId>) -> Result<Self, UiError> {
         let (id, selected) = (id.into(), selected.into());
         if slots.iter().any(|s| s.tools.is_empty()) {
             return Err(UiError::EmptySlot { palette: id });
+        }
+        if let Some(tool) = slots.iter().flat_map(|s| &s.tools).find(|t| t.label.trim().is_empty()) {
+            return Err(UiError::EmptyLabel { context: format!("tool `{}` in palette `{id}`", tool.id) });
         }
         let mut seen = HashSet::new();
         if let Some(dup) = slots.iter().flat_map(|s| &s.tools).find(|t| !seen.insert(&t.id)) {
@@ -210,6 +214,8 @@ mod tests {
         empty.push(ToolSlot::new(vec![]));
         assert_eq!(ToolPalette::new("tools", empty, "move").unwrap_err(), UiError::EmptySlot { palette: "tools".into() });
         assert_eq!(ToolPalette::new("tools", slots(), "brush").unwrap().selected().as_str(), "brush");
+        let unlabelled = vec![ToolSlot::one(Tool::new("move", " ", Icon::letter('V')))];
+        assert!(matches!(ToolPalette::new("tools", unlabelled, "move").unwrap_err(), UiError::EmptyLabel { .. }));
     }
 
     #[test]

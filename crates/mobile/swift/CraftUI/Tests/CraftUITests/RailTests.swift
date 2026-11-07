@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import Testing
 @testable import CraftUI
 
@@ -29,6 +30,38 @@ import Testing
         #expect(CraftToolPalette(id: "p", slots: palette.slots, selected: "move", fallbackOptions: "window.toggle.optionsBar").optionsRoute == .command("window.toggle.optionsBar"))
         #expect(palette.withoutOptions.optionsRoute == nil)
         #expect(palette.selecting("pencil").selected == "pencil")
+    }
+
+    /// A broken tool or slot is left out; a slot left empty goes; the rest of the rail shows.
+    @Test func decodingSkipsWhatItCantRead() throws {
+        let json = #"""
+        {"type":"tool_palette","id":"palette","selected":"move","options":null,"fallback_options":null,"slots":[
+          {"tools":[{"id":"move","label":"Move","icon":{"symbol":null,"letter":"V"},"shortcut":null}]},
+          {"tools":[{"id":"broken"}]},
+          7,
+          {"tools":[{"label":"No id"},{"id":"smudge","label":"Smudge","icon":{"symbol":null,"letter":null},"shortcut":"S"}]}]}
+        """#
+        guard case let .toolPalette(palette) = try JSONDecoder().decode(CraftNode.self, from: Data(json.utf8)) else {
+            Issue.record("not a palette"); return
+        }
+        #expect(palette.slots.map { $0.tools.map(\.id) } == [["move"], ["smudge"]])
+    }
+
+    /// A double-tap on a tool the app hasn't described as selected yet must not open the previous
+    /// tool's options: they open once the palette says it's selected.
+    @Test func aDoubleTapOpensTheTappedToolsOptions() {
+        let stale = CraftToolPalette.preview  // Brush selected, Brush's panel
+        #expect(CraftRailView<EmptyView>.optionsNow(for: "pencil", in: stale) == nil)
+        #expect(CraftRailView<EmptyView>.optionsNow(for: "brush", in: stale) == .panel("brush"))
+        let described = CraftToolPalette(id: "palette", slots: stale.slots, selected: "pencil", options: "pencil")
+        #expect(CraftRailView<EmptyView>.optionsNow(for: "pencil", in: described) == .panel("pencil"))
+    }
+
+    @Test func aToolsHintSaysItsShortcutAndItsFlyout() throws {
+        let brush = try #require(CraftToolPalette.preview.slots[safe: 1]?.tools.first)
+        #expect(CraftRailSlot.hint(brush, more: true) == "Shortcut B. More tools in the actions.")
+        #expect(CraftRailSlot.hint(CraftTool(id: "x", label: "X", icon: CraftToolIcon()), more: false) == "")
+        #expect(CraftRailSlot.glyphs(CraftTool(id: "x", label: "X", icon: CraftToolIcon(), shortcut: "Shift+B")) == "⇧B")
     }
 
     @Test func anIconIsItsSymbolElseItsLetterElseTheLabelsFirstLetter() {

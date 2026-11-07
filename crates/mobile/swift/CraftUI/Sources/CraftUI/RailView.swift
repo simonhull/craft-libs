@@ -63,6 +63,14 @@ public struct CraftToolSlot: Decodable, Equatable, Sendable {
         self.tools = tools
     }
 
+    private enum Key: String, CodingKey { case tools }
+
+    /// A tool this kit can't read is left out of the slot.
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: Key.self)
+        tools = try c.decode([Skippable<CraftTool>].self, forKey: .tools).compactMap(\.value)
+    }
+
     /// The tool the slot shows while `selected` is the selected tool.
     public func shown(selected: String) -> CraftTool? {
         tools.first { $0.id == selected } ?? tools.first
@@ -86,6 +94,18 @@ public struct CraftToolPalette: Decodable, Equatable, Sendable {
     enum CodingKeys: String, CodingKey {
         case id, slots, selected, options
         case fallbackOptions = "fallback_options"
+    }
+
+    /// Lenient as the menus are: a slot or tool this kit can't read is left out (a slot left with
+    /// no tools too); the rest of the rail still shows.
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self = try CraftToolPalette(
+            id: c.decode(String.self, forKey: .id),
+            slots: c.decode([Skippable<CraftToolSlot>].self, forKey: .slots).compactMap(\.value).filter { !$0.tools.isEmpty },
+            selected: c.decode(String.self, forKey: .selected),
+            options: (try? c.decodeIfPresent(String.self, forKey: .options)) ?? nil,
+            fallbackOptions: (try? c.decodeIfPresent(String.self, forKey: .fallbackOptions)) ?? nil)
     }
 
     /// The same palette with another tool selected (as the app describes it after a pick).
@@ -145,6 +165,9 @@ public struct CraftRailView<Options: View>: View {
     @Binding var optionsPanel: String?
     let optionsContent: (String) -> Options
     @State private var taps = CraftRailTaps()
+    /// A tool double-tapped before the app described it selected: its options open once it has,
+    /// so they are that tool's and not the previous one's.
+    @State private var pendingOptions: String?
 
     public init(
         palette: CraftToolPalette, panel: String, axis: Axis = .vertical, send: @escaping @MainActor (CraftEdit) -> Void,
@@ -180,14 +203,31 @@ public struct CraftRailView<Options: View>: View {
         }
         .padding(6)
         .glassEffect(.regular, in: .capsule)
+        .onChange(of: palette) { _, palette in
+            guard let tool = pendingOptions, palette.selected == tool else { return }
+            pendingOptions = nil
+            palette.optionsRoute.map(open)
+        }
     }
 
     private func tap(_ tool: String) {
+        pendingOptions = nil
         switch taps.tap(tool, selected: palette.selected, at: .now) {
         case .select: select(tool)
-        case .options: palette.optionsRoute.map(open)
+        case .options:
+            switch Self.optionsNow(for: tool, in: palette) {
+            case let .some(route): open(route)
+            case .none where tool != palette.selected: pendingOptions = tool
+            case .none: break
+            }
         case .nothing: break
         }
+    }
+
+    /// The options a double-tap on `tool` opens now: only the selected tool's are in the palette, so
+    /// a tool the app hasn't described as selected yet must wait for it.
+    nonisolated static func optionsNow(for tool: String, in palette: CraftToolPalette) -> CraftRailOptions? {
+        tool == palette.selected ? palette.optionsRoute : nil
     }
 
     private func select(_ tool: String) {
@@ -209,6 +249,8 @@ struct CraftRailSlot: View {
     let tool: CraftTool
     let selected: String
     let tap: (String) -> Void
+    /// The flyout as a list, for VoiceOver's More Tools action (a menu can't be opened in code).
+    @State private var listingTools = false
 
     var body: some View {
         let isSelected = tool.id == selected
@@ -222,7 +264,7 @@ struct CraftRailSlot: View {
                             } else {
                                 Text(other.label)
                             }
-                            if let shortcut = other.shortcut { Text(shortcut) }
+                            if let keys = Self.glyphs(other) { Text(keys) }
                         }
                     }
                 } label: {
@@ -240,15 +282,31 @@ struct CraftRailSlot: View {
                 }
                 .menuStyle(.button)
                 .buttonStyle(.plain)
-                .accessibilityHint("Hold for more tools")
+                .accessibilityAction(named: "More tools") { listingTools = true }
+                .confirmationDialog("Tools", isPresented: $listingTools) {
+                    ForEach(slot.tools) { other in
+                        Button(other.label) { tap(other.id) }
+                    }
+                }
             } else {
                 Button { tap(tool.id) } label: { face(isSelected).modifier(SelectedForeground(selected: isSelected)) }
                     .buttonStyle(.plain)
             }
         }
         .accessibilityLabel(tool.label)
+        .accessibilityHint(Self.hint(tool, more: slot.tools.count > 1))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
-        .help(tool.shortcut.map { "\(tool.label) (\($0))" } ?? tool.label)
+        .help(Self.glyphs(tool).map { "\(tool.label) (\($0))" } ?? tool.label)
+    }
+
+    /// The tool's shortcut as the kit shows every shortcut (`⇧B`).
+    nonisolated static func glyphs(_ tool: CraftTool) -> String? {
+        tool.shortcut.flatMap(CraftShortcut.init).map(\.glyphs)
+    }
+
+    /// What VoiceOver says after the label: the shortcut, and that the slot has more tools.
+    nonisolated static func hint(_ tool: CraftTool, more: Bool) -> String {
+        [glyphs(tool).map { "Shortcut \($0)." }, more ? "More tools in the actions." : nil].compactMap { $0 }.joined(separator: " ")
     }
 
     private func face(_ isSelected: Bool) -> some View {
