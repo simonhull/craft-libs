@@ -1,5 +1,5 @@
 #!/bin/sh
-# Build a Craft app for iPadOS with CraftKit: the app's Rust static library, CraftKit and the
+# Build a Craft app for iPadOS with CraftKit: the app's Rust static library, CraftKit (with CraftUI) and the
 # app's own Swift, linked into an .app bundle.
 #
 #   build-ios.sh <cargo package> <app dir with Info.plist and *.swift> <bundle name> [sim|device]
@@ -22,7 +22,7 @@ bundle=$target_dir/$rust/release/$name.app
 rm -rf "$bundle" && mkdir -p "$bundle"
 # The static archive by path: -l would pick the cdylib built beside it.
 xcrun --sdk "$sdk" swiftc -O -target "$triple" -parse-as-library -module-name "$name" \
-  -import-objc-header "$kit/include/CraftMobile.h" "$kit"/Sources/*.swift "$app_dir"/*.swift \
+  -import-objc-header "$kit/include/CraftMobile.h" "$kit"/Sources/*.swift "$kit"/../CraftUI/Sources/CraftUI/*.swift "$app_dir"/*.swift \
   "$lib" -lc++ \
   -framework SwiftUI -framework UIKit -framework Metal -framework QuartzCore -framework CoreGraphics -framework CoreText \
   -framework Foundation -framework Security -framework SystemConfiguration -framework UniformTypeIdentifiers -framework Photos -framework PhotosUI \

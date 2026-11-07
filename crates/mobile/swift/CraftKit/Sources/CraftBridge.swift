@@ -88,6 +88,11 @@ public final class CraftBridge {
     public static let shared = CraftBridge()
 
     public private(set) var snapshot = CraftSnapshot()
+    /// The app's native panels: every one it offers, and the open ones described (wire kind 13).
+    public private(set) var panels = CraftPanels()
+    /// The panels the shell shows, sorted: said again when the canvas starts, so the app describes
+    /// them even if the shell said it before the app was running.
+    private var shownPanels: [String] = []
     /// The picker the app asked for; the shell shows it while this is set.
     public var pick: CraftPickRequest?
     /// Whether the document picker is on screen. Separate from `pick`: SwiftUI reports the picker
@@ -146,6 +151,42 @@ public final class CraftBridge {
 
     public func perform(_ action: CraftAction) {
         guard let json = try? JSONSerialization.data(withJSONObject: action.json) else { return }
+        send(json: json)
+    }
+
+    // MARK: Native panels
+
+    /// Deliver an edit from a native panel to the app. Only for the user's own gestures.
+    public func send(_ edit: CraftEdit) {
+        guard let json = try? JSONEncoder().encode(edit) else { return }
+        send(json: json)
+    }
+
+    /// The panels on screen now, by id; only they are described. Call whenever the set changes.
+    public func showing(_ ids: Set<String>) {
+        shownPanels = ids.sorted()
+        sayShowing()
+    }
+
+    /// The canvas started the app: tell it which panels are on screen, in case the shell said so
+    /// before the app was there to hear it.
+    func started() {
+        sayShowing()
+    }
+
+    private func sayShowing() {
+        guard let json = try? JSONEncoder().encode(OpenPanels(open: shownPanels)) else { return }
+        send(json: json)
+    }
+
+    /// `{"action":"open_panels","open":[…]}`.
+    private struct OpenPanels: Encodable {
+        let action = "open_panels"
+        let open: [String]
+    }
+
+    /// One message to the app, through the same call as every native control's.
+    private func send(json: Data) {
         json.withUnsafeBytes { raw in
             _ = craft_action(raw.bindMemory(to: UInt8.self).baseAddress, raw.count)
         }
@@ -374,6 +415,10 @@ public final class CraftBridge {
             exportRoute = .share
         case 12:
             showsPhotos = true
+        case 13:
+            if let decoded = try? JSONDecoder().decode(CraftPanels.self, from: Data(text.utf8)), decoded != panels {
+                panels = decoded
+            }
         default:
             break
         }

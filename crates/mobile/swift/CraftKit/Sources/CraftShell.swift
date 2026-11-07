@@ -4,7 +4,8 @@ import UIKit
 import UniformTypeIdentifiers
 
 /// A Craft app's whole window: the canvas; optionally native chrome (a Liquid Glass toolbar and the
-/// items inspector for layers, tracks, pages); the system document picker, exporter and share sheet
+/// items inspector for layers, tracks, pages) and the app's native panels (inspectors and tool
+/// popovers it describes, drawn by CraftUI); the system document picker, exporter and share sheet
 /// (also straight from the app: `Platform::share`), the Photos picker (the toolbar's, or the app's
 /// own menu item through `Platform::pick_photos`), and Save to Photos for image exports (the app's
 /// Info.plist needs `NSPhotoLibraryAddUsageDescription`). Put it in a `WindowGroup`.
@@ -15,9 +16,14 @@ public struct CraftShell: View {
     let colorSpace: CraftColorSpace
     let pencil: CraftPencilActions
     let chrome: Bool
+    let nativePanels: Bool
 
     @State private var bridge = CraftBridge.shared
-    @State private var showItems = false
+    /// What the inspector shows; kept when it closes, so it slides away with its contents.
+    @State private var inspector = Inspector.items
+    @State private var inspectorShown = false
+    /// The tool panel whose popover is up.
+    @State private var popover: String?
     @State private var photos: [PhotosPickerItem] = []
 
     /// - Parameters:
@@ -29,8 +35,11 @@ public struct CraftShell: View {
     ///   - pencil: what Apple Pencil's double-tap and squeeze do (the app's command ids).
     ///   - chrome: native toolbar and items inspector over the canvas. Off by default: an app that
     ///     draws its own menus and panels would show everything twice.
-    public init(documentTypes: [UTType], drawing: CraftDrawingInput = .anyTouch, colorSpace: CraftColorSpace = .sRGB, pencil: CraftPencilActions = CraftPencilActions(), chrome: Bool = false) {
+    ///   - nativePanels: the app's native panels, each a toolbar button: an inspector beside the
+    ///     canvas or a tool popover. Off by default, like `chrome`; the app hides its own versions.
+    public init(documentTypes: [UTType], drawing: CraftDrawingInput = .anyTouch, colorSpace: CraftColorSpace = .sRGB, pencil: CraftPencilActions = CraftPencilActions(), chrome: Bool = false, nativePanels: Bool = false) {
         self.chrome = chrome
+        self.nativePanels = nativePanels
         self.documentTypes = documentTypes
         self.drawing = drawing
         self.colorSpace = colorSpace
@@ -38,6 +47,22 @@ public struct CraftShell: View {
     }
 
     private var opensImages: Bool { documentTypes.contains { $0.conforms(to: .image) } }
+
+    /// What the inspector column holds.
+    private enum Inspector: Hashable {
+        /// The items panel (`chrome`).
+        case items
+        /// One of the app's inspector panels, by id.
+        case panel(String)
+    }
+
+    /// The app's panels on screen, which it describes.
+    private var shownPanels: Set<String> {
+        var shown: Set<String> = []
+        if inspectorShown, case let .panel(id) = inspector { shown.insert(id) }
+        if let popover { shown.insert(popover) }
+        return shown
+    }
 
     public var body: some View {
         CraftCanvas(drawing: drawing, colorSpace: colorSpace, pencil: pencil)
@@ -47,12 +72,20 @@ public struct CraftShell: View {
             .background(Color.black)
             .overlay(alignment: .bottom) {
                 // While typing, the keyboard is the toolbar.
-                if chrome, !bridge.keyboardVisible { toolbar.padding(.bottom, 20).transition(.opacity) }
+                if chrome || nativePanels, !bridge.keyboardVisible { toolbar.padding(.bottom, 20).transition(.opacity) }
             }
             .animation(.easeOut(duration: 0.2), value: bridge.keyboardVisible)
-            .inspector(isPresented: Binding(get: { chrome && showItems }, set: { showItems = $0 })) {
-                CraftItemsPanel(snapshot: bridge.snapshot, perform: bridge.perform)
-                    .inspectorColumnWidth(min: 240, ideal: 300, max: 400)
+            .inspector(isPresented: Binding(get: { inspectorShown && isAvailable(inspector) }, set: { inspectorShown = $0 })) {
+                inspectorContent
+            }
+            .onChange(of: shownPanels, initial: true) { _, shown in
+                if nativePanels { bridge.showing(shown) }
+            }
+            .onChange(of: bridge.panels.panels) { _, offered in
+                // A panel the app no longer offers closes; one it still offers stays open.
+                let ids = Set(offered.map(\.id))
+                if case let .panel(id) = inspector, !ids.contains(id) { inspectorShown = false }
+                if let popover, !ids.contains(popover) { self.popover = nil }
             }
             .fileImporter(
                 // Closing only hides the picker: SwiftUI closes it before it delivers the chosen
@@ -131,38 +164,120 @@ public struct CraftShell: View {
             // Craft apps are dark pro tools; the native chrome matches the canvas.
             .preferredColorScheme(.dark)
             // Development aid (see CraftDevelopment): CRAFT_DEMO_SHOW_ITEMS=1 opens the inspector.
-            .onAppear { showItems = ProcessInfo.processInfo.environment["CRAFT_DEMO_SHOW_ITEMS"] == "1" }
+            .onAppear {
+                if ProcessInfo.processInfo.environment["CRAFT_DEMO_SHOW_ITEMS"] == "1" {
+                    inspector = .items
+                    inspectorShown = true
+                }
+            }
+    }
+
+    /// Whether the inspector may show this: each kind only when the shell was asked for it.
+    private func isAvailable(_ inspector: Inspector) -> Bool {
+        switch inspector {
+        case .items: chrome
+        case .panel: nativePanels
+        }
+    }
+
+    @ViewBuilder private var inspectorContent: some View {
+        switch inspector {
+        case .items:
+            CraftItemsPanel(snapshot: bridge.snapshot, perform: bridge.perform)
+                .inspectorColumnWidth(min: 240, ideal: 300, max: 400)
+        case let .panel(id):
+            NavigationStack {
+                panel(id)
+            }
+            .inspectorColumnWidth(min: 280, ideal: 320, max: 400)
+        }
+    }
+
+    /// One of the app's panels as described, or a spinner until the app describes it.
+    @ViewBuilder private func panel(_ id: String) -> some View {
+        if let panel = bridge.panels.open[id] {
+            CraftPanelView(panel: panel, send: bridge.send)
+        } else {
+            ProgressView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .navigationTitle(bridge.panels.panels.first { $0.id == id }?.title ?? "")
+        }
+    }
+
+    /// Open or close an inspector; another one in the column gives way.
+    private func toggleInspector(_ which: Inspector) {
+        withAnimation {
+            if inspectorShown, inspector == which {
+                inspectorShown = false
+            } else {
+                inspector = which
+                inspectorShown = true
+            }
+        }
+    }
+
+    private func isShowing(_ which: Inspector) -> Bool {
+        inspectorShown && inspector == which
     }
 
     private var toolbar: some View {
-        let snapshot = bridge.snapshot
-        return GlassEffectContainer(spacing: 12) {
+        GlassEffectContainer(spacing: 12) {
             HStack(spacing: 12) {
-                HStack(spacing: 4) {
-                    tool("Open", "folder") { bridge.perform(.open) }
-                    if opensImages {
-                        tool("Import from Photos", "photo.on.rectangle") { bridge.showsPhotos = true }
-                    }
-                    tool("Save", "square.and.arrow.down") { bridge.perform(.save) }
-                        .disabled(snapshot.document == nil)
-                }
-                .padding(6)
-                .glassEffect(.regular.interactive(), in: .capsule)
-
-                HStack(spacing: 4) {
-                    tool("Undo", "arrow.uturn.backward") { bridge.perform(.undo) }
-                        .disabled(!snapshot.canUndo)
-                    tool("Redo", "arrow.uturn.forward") { bridge.perform(.redo) }
-                        .disabled(!snapshot.canRedo)
-                }
-                .padding(6)
-                .glassEffect(.regular.interactive(), in: .capsule)
-
-                tool(snapshot.itemsTitle, "square.3.layers.3d") { withAnimation { showItems.toggle() } }
-                    .padding(6)
-                    .glassEffect(showItems ? .regular.tint(.accentColor).interactive() : .regular.interactive(), in: .circle)
+                if chrome { chromeTools }
+                if nativePanels, !bridge.panels.panels.isEmpty { panelTools }
             }
         }
+    }
+
+    /// The app's panels, one button each, like the items button: an inspector toggles the column, a
+    /// tool opens its popover. The open one is tinted.
+    private var panelTools: some View {
+        ForEach(bridge.panels.panels) { info in
+            switch info.role {
+            case .inspector:
+                panelTool(info, open: isShowing(.panel(info.id))) { toggleInspector(.panel(info.id)) }
+            case .tool:
+                panelTool(info, open: popover == info.id) { popover = popover == info.id ? nil : info.id }
+                    .popover(isPresented: Binding(get: { popover == info.id }, set: { if !$0, popover == info.id { popover = nil } })) {
+                        CraftPopoverPanel { panel(info.id) }
+                    }
+            }
+        }
+    }
+
+    private func panelTool(_ info: CraftPanelInfo, open: Bool, action: @escaping () -> Void) -> some View {
+        tool(info.title, info.icon, action: action)
+            .padding(6)
+            .glassEffect(open ? .regular.tint(.accentColor).interactive() : .regular.interactive(), in: .circle)
+            .accessibilityAddTraits(open ? .isSelected : [])
+    }
+
+    /// Files, history and the items inspector (`chrome`).
+    @ViewBuilder private var chromeTools: some View {
+        let snapshot = bridge.snapshot
+        HStack(spacing: 4) {
+            tool("Open", "folder") { bridge.perform(.open) }
+            if opensImages {
+                tool("Import from Photos", "photo.on.rectangle") { bridge.showsPhotos = true }
+            }
+            tool("Save", "square.and.arrow.down") { bridge.perform(.save) }
+                .disabled(snapshot.document == nil)
+        }
+        .padding(6)
+        .glassEffect(.regular.interactive(), in: .capsule)
+
+        HStack(spacing: 4) {
+            tool("Undo", "arrow.uturn.backward") { bridge.perform(.undo) }
+                .disabled(!snapshot.canUndo)
+            tool("Redo", "arrow.uturn.forward") { bridge.perform(.redo) }
+                .disabled(!snapshot.canRedo)
+        }
+        .padding(6)
+        .glassEffect(.regular.interactive(), in: .capsule)
+
+        tool(snapshot.itemsTitle, "square.3.layers.3d") { toggleInspector(.items) }
+            .padding(6)
+            .glassEffect(isShowing(.items) ? .regular.tint(.accentColor).interactive() : .regular.interactive(), in: .circle)
     }
 
     /// Open each photo as the app opens a file, in the library's own format (HEIC stays HEIC).
@@ -186,6 +301,26 @@ public struct CraftShell: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
+    }
+}
+
+/// A tool panel in a popover: as tall as its contents, up to what fits, and a popover even where
+/// the window is compact (Slide Over, a narrow split), as a tool's options should be.
+struct CraftPopoverPanel<Content: View>: View {
+    @ViewBuilder let content: Content
+    @State private var height: CGFloat = 360
+
+    var body: some View {
+        NavigationStack {
+            content
+                .navigationBarTitleDisplayMode(.inline)
+                .scrollBounceBehavior(.basedOnSize)
+                .onScrollGeometryChange(for: CGFloat.self) { $0.contentSize.height + $0.contentInsets.top + $0.contentInsets.bottom } action: { _, new in
+                    height = new
+                }
+        }
+        .frame(idealWidth: 340, idealHeight: min(max(height, 120), 640))
+        .presentationCompactAdaptation(.popover)
     }
 }
 

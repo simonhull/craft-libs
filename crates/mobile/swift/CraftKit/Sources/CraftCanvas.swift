@@ -342,6 +342,7 @@ public final class CraftCanvasView: UIView, UIGestureRecognizerDelegate, UIPenci
             Self.setDataDirectory()
             started = craft_start(Unmanaged.passUnretained(metal).toOpaque(), width, height, Float(scale))
             if started {
+                CraftBridge.shared.started()
                 applyFrameRate()
                 CraftDevelopment.replay()
             }
