@@ -42,8 +42,8 @@ import UIKit
     @available(iOS, deprecated: 26, message: "Renders in a scene-less window")
     @Test func aChangedValueIsReported() throws {
         let opacity = Fixtures.layers.nodes.map { node -> CraftNode in
-            guard case let .number(id, label, _, min, max, step, unit, enabled) = node, id == "opacity" else { return node }
-            return .number(id: id, label: label, value: 0.5, min: min, max: max, step: step, unit: unit, enabled: enabled)
+            guard case let .number(id, label, _, min, max, step, unit, enabled, scale) = node, id == "opacity" else { return node }
+            return .number(id: id, label: label, value: 0.5, min: min, max: max, step: step, unit: unit, enabled: enabled, scale: scale)
         }
         let renamed = Fixtures.layers.nodes.map { node -> CraftNode in
             guard case let .itemList(id, rows, reorderable) = node else { return node }

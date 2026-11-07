@@ -6,8 +6,8 @@ use std::fmt::Write as _;
 use serde::Serialize;
 
 use super::{
-    Choice, ChoiceOption, Edit, EditValue, ItemList, Message, Node, Number, Panel, PanelInfo, PanelRole, Phase, Position, Published, Row, Section,
-    Toggle, Unit,
+    Choice, ChoiceOption, Edit, EditValue, ItemList, Message, Node, Number, Panel, PanelInfo, PanelRole, Phase, Position, Published, Row, Scale,
+    Section, Toggle, Unit,
 };
 
 /// The catalogue's format version; bump it when a node's JSON changes.
@@ -34,19 +34,24 @@ struct Catalogue {
 
 /// An edit to a control of the `layers` panel.
 fn edit(control: &str, phase: Phase, gesture: u64, value: EditValue) -> Message {
-    Message::Edit(Edit { panel: "layers".into(), control: control.into(), phase, gesture, value })
+    edit_in("layers", control, phase, gesture, value)
+}
+
+/// An edit to a control of `panel`.
+fn edit_in(panel: &str, control: &str, phase: Phase, gesture: u64, value: EditValue) -> Message {
+    Message::Edit(Edit { panel: panel.into(), control: control.into(), phase, gesture, value })
 }
 
 fn examples() -> Vec<Primitive> {
     let mut out = Vec::new();
-    if let Ok(n) = Number::new("opacity", "Opacity", 0.0..=1.0, 0.8) {
+    if let Ok(n) = Number::new("size", "Size", 1.0..=5000.0, 24.0).and_then(|n| n.step(1.0).unit(Unit::Pixels).scale(Scale::Log)) {
         out.push(Primitive {
             name: "number",
             about: "A value in a range: a slider, with the value shown beside it; tap the value to type one.",
-            fields: "`value` within `min`..=`max`; `step` snaps it (`null`: continuous); `unit` is `none`, `percent` (a 0..=1 value shown as 0–100 %), `pixels` or `degrees`; `enabled: false` greys it out.",
+            fields: "`value` within `min`..=`max`; `step` snaps it (`null`: continuous); `scale: \"log\"` spreads the slider by ratio, for a wide range such as a brush size (needs `min` above 0; left out, the slider is linear); `unit` is `none`, `percent` (a 0..=1 value shown as 0–100 %), `pixels` or `degrees`; `enabled: false` greys it out. Values and edits are in the number's own units whatever the scale.",
             sends: "`number` edits: `begin`, `change` while dragging, then `commit` (or `cancel`); a typed value is one `commit`.",
-            example: Node::Number(n.unit(Unit::Percent)),
-            edit: Some(edit("opacity", Phase::Change, 7, EditValue::Number(0.5))),
+            example: Node::Number(n),
+            edit: Some(edit_in("brush", "size", Phase::Change, 7, EditValue::Number(120.0))),
         });
     }
     out.push(Primitive {

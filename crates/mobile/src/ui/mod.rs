@@ -12,7 +12,7 @@ mod publish;
 
 pub use catalogue::{catalogue_json, catalogue_markdown};
 pub use edit::{Edit, EditValue, Message, Phase, Position};
-pub use node::{Choice, ChoiceOption, ControlId, ItemList, Node, Number, Panel, PanelId, PanelInfo, PanelRole, Row, Section, Toggle, Unit};
+pub use node::{Choice, ChoiceOption, ControlId, ItemList, Node, Number, Panel, PanelId, PanelInfo, PanelRole, Row, Scale, Section, Toggle, Unit};
 pub(crate) use publish::PanelsState;
 use publish::Published;
 
@@ -22,6 +22,12 @@ pub enum UiError {
     /// A number's range is empty or not finite.
     #[error("`{id}`: the range is empty or not finite")]
     EmptyRange {
+        /// The control.
+        id: String,
+    },
+    /// A number on a logarithmic scale has a range reaching zero or below.
+    #[error("`{id}`: a logarithmic scale needs a minimum above zero")]
+    LogScaleNeedsPositiveMin {
         /// The control.
         id: String,
     },

@@ -100,7 +100,7 @@ extension CraftNode {
     func value(of control: String) -> CraftEdit.Value? {
         switch self {
         case let .section(_, _, _, children): children.lazy.compactMap { $0.value(of: control) }.first
-        case let .number(id, _, value, _, _, _, _, _) where id == control: .number(value)
+        case let .number(id, _, value, _, _, _, _, _, _) where id == control: .number(value)
         case let .toggle(id, _, value, _) where id == control: .toggle(value)
         case let .choice(id, _, value, _, _) where id == control: .choice(value)
         default: nil
@@ -113,8 +113,10 @@ extension CraftNode {
         switch (self, value) {
         case let (.section(id, title, collapsed, children), _):
             return .section(id: id, title: title, collapsed: collapsed, children: children.map { $0.applying(value, to: control) })
-        case let (.number(id, label, _, min, max, step, unit, enabled), .number(new)) where id == control:
-            return .number(id: id, label: label, value: Swift.min(Swift.max(new, min), max), min: min, max: max, step: step, unit: unit, enabled: enabled)
+        case let (.number(id, label, _, min, max, step, unit, enabled, scale), .number(new)) where id == control:
+            return .number(
+                id: id, label: label, value: Swift.min(Swift.max(new, min), max), min: min, max: max, step: step, unit: unit,
+                enabled: enabled, scale: scale)
         case let (.toggle(id, label, _, enabled), .toggle(new)) where id == control:
             return .toggle(id: id, label: label, value: new, enabled: enabled)
         case let (.choice(id, label, _, options, enabled), .choice(new)) where id == control && options.contains { $0.id == new }:

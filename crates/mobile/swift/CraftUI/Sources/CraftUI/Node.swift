@@ -98,7 +98,7 @@ public indirect enum CraftNode: Decodable, Equatable, Sendable {
     /// A titled group. `collapsed` is only how it starts: after it first appears, collapsing is the
     /// user's, until the panel's views are built again (the panel closed and reopened).
     case section(id: String, title: String, collapsed: Bool, children: [CraftNode])
-    case number(id: String, label: String, value: Double, min: Double, max: Double, step: Double?, unit: Unit, enabled: Bool)
+    case number(id: String, label: String, value: Double, min: Double, max: Double, step: Double?, unit: Unit, enabled: Bool, scale: Scale = .linear)
     case toggle(id: String, label: String, value: Bool, enabled: Bool)
     case choice(id: String, label: String, value: String, options: [CraftChoiceOption], enabled: Bool)
     case itemList(id: String, rows: [CraftRow], reorderable: Bool)
@@ -116,8 +116,18 @@ public indirect enum CraftNode: Decodable, Equatable, Sendable {
         }
     }
 
+    /// How a number's slider spreads its range: `log` by ratio (`min·(max/min)^t`), for a wide range
+    /// such as a brush size. Missing, or one this kit doesn't know, is `.linear`.
+    public enum Scale: String, Decodable, Sendable {
+        case linear, log
+
+        public init(from decoder: any Decoder) throws {
+            self = try Scale(rawValue: decoder.singleValueContainer().decode(String.self)) ?? .linear
+        }
+    }
+
     private enum Key: String, CodingKey {
-        case type, id, title, collapsed, children, label, value, min, max, step, unit, enabled, options, rows, reorderable
+        case type, id, title, collapsed, children, label, value, min, max, step, unit, enabled, scale, options, rows, reorderable
     }
 
     public init(from decoder: any Decoder) throws {
@@ -133,7 +143,8 @@ public indirect enum CraftNode: Decodable, Equatable, Sendable {
                 id: c.decode(String.self, forKey: .id), label: c.decode(String.self, forKey: .label),
                 value: c.decode(Double.self, forKey: .value), min: c.decode(Double.self, forKey: .min),
                 max: c.decode(Double.self, forKey: .max), step: c.decodeIfPresent(Double.self, forKey: .step),
-                unit: c.decode(Unit.self, forKey: .unit), enabled: c.decode(Bool.self, forKey: .enabled))
+                unit: c.decode(Unit.self, forKey: .unit), enabled: c.decode(Bool.self, forKey: .enabled),
+                scale: c.decodeIfPresent(Scale.self, forKey: .scale) ?? .linear)
         case "toggle":
             self = try .toggle(
                 id: c.decode(String.self, forKey: .id), label: c.decode(String.self, forKey: .label),
@@ -180,7 +191,7 @@ public indirect enum CraftNode: Decodable, Equatable, Sendable {
     /// The node's id, for diffing (`unknown` and `malformed` nodes use their type).
     public var id: String {
         switch self {
-        case let .section(id, _, _, _), let .number(id, _, _, _, _, _, _, _), let .toggle(id, _, _, _),
+        case let .section(id, _, _, _), let .number(id, _, _, _, _, _, _, _, _), let .toggle(id, _, _, _),
              let .choice(id, _, _, _, _), let .itemList(id, _, _):
             id
         case let .unknown(type):

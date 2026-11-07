@@ -38,7 +38,7 @@ enum JSONValue: Decodable, Equatable {
     /// The catalogue's sample edits are what Rust parses; `CraftEdit` must encode the same JSON.
     @Test func editsEncodeAsTheCatalogueSays() throws {
         let expected: [String: CraftEdit] = [
-            "number": CraftEdit(panel: "layers", control: "opacity", phase: .change, gesture: 7, value: .number(0.5)),
+            "number": CraftEdit(panel: "brush", control: "size", phase: .change, gesture: 7, value: .number(120)),
             "toggle": CraftEdit(panel: "layers", control: "visible", phase: .commit, gesture: 8, value: .toggle(false)),
             "choice": CraftEdit(panel: "layers", control: "blend", phase: .commit, gesture: 9, value: .choice("multiply")),
             "item_list": CraftEdit(panel: "layers", control: "layers", phase: .commit, gesture: 10, value: .move(row: 1, target: 2, position: .above)),
@@ -97,6 +97,26 @@ enum JSONValue: Decodable, Equatable {
         let panels = try JSONDecoder().decode(CraftPanels.self, from: Data(json.utf8))
         #expect(panels.panels.map(\.id) == ["layers", "brush"])
         #expect(Array(panels.open.keys) == ["layers"])
+    }
+
+    /// A number's `scale`: missing (as Rust leaves it for linear) or one this kit doesn't know is linear.
+    @Test func aNumbersScaleDecodesAndDefaultsToLinear() throws {
+        func scale(_ extra: String) throws -> CraftNode.Scale? {
+            let json = #"{"type":"number","id":"n","label":"N","value":2,"min":1,"max":10,"step":null,"unit":"none","enabled":true\#(extra)}"#
+            guard case let .number(_, _, _, _, _, _, _, _, scale) = try JSONDecoder().decode(CraftNode.self, from: Data(json.utf8)) else { return nil }
+            return scale
+        }
+        #expect(try scale(#","scale":"log""#) == .log)
+        #expect(try scale("") == .linear)
+        #expect(try scale(#","scale":"linear""#) == .linear)
+        #expect(try scale(#","scale":"spiral""#) == .linear)
+        #expect(try scale(#","scale":null"#) == .linear)
+    }
+
+    @Test func theCataloguesNumberIsLogarithmic() throws {
+        let number = try #require(try Self.catalogue().primitives.first { $0.name == "number" })
+        guard case let .number(_, _, _, _, _, _, _, _, scale) = number.example else { Issue.record("not a number"); return }
+        #expect(scale == .log)
     }
 
     @Test func anUnknownNodeBecomesAPlaceholder() throws {

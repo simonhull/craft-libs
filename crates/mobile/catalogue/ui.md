@@ -12,18 +12,19 @@ A shell sends edits only for the user's own gestures, never while showing a valu
 
 A value in a range: a slider, with the value shown beside it; tap the value to type one.
 
-**Fields:** `value` within `min`..=`max`; `step` snaps it (`null`: continuous); `unit` is `none`, `percent` (a 0..=1 value shown as 0–100 %), `pixels` or `degrees`; `enabled: false` greys it out.
+**Fields:** `value` within `min`..=`max`; `step` snaps it (`null`: continuous); `scale: "log"` spreads the slider by ratio, for a wide range such as a brush size (needs `min` above 0; left out, the slider is linear); `unit` is `none`, `percent` (a 0..=1 value shown as 0–100 %), `pixels` or `degrees`; `enabled: false` greys it out. Values and edits are in the number's own units whatever the scale.
 
 ```json
 {
   "type": "number",
-  "id": "opacity",
-  "label": "Opacity",
-  "value": 0.8,
-  "min": 0.0,
-  "max": 1.0,
-  "step": null,
-  "unit": "percent",
+  "id": "size",
+  "label": "Size",
+  "value": 24.0,
+  "min": 1.0,
+  "max": 5000.0,
+  "step": 1.0,
+  "scale": "log",
+  "unit": "pixels",
   "enabled": true
 }
 ```
@@ -33,7 +34,7 @@ A value in a range: a slider, with the value shown beside it; tap the value to t
 For example:
 
 ```json
-{"action":"edit","panel":"layers","control":"opacity","phase":"change","gesture":7,"value":{"kind":"number","value":0.5}}
+{"action":"edit","panel":"brush","control":"size","phase":"change","gesture":7,"value":{"kind":"number","value":120.0}}
 ```
 
 ## `toggle`

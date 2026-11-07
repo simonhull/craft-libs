@@ -33,11 +33,11 @@ struct CraftNodeView: View {
             CraftSectionView(title: title, collapsed: collapsed) {
                 ForEach(Self.keyed(children), id: \.key) { CraftNodeView(node: $0.node, panel: panel, send: send) }
             }
-        case let .number(id, label, value, min, max, step, unit, enabled):
+        case let .number(id, label, value, min, max, step, unit, enabled, scale):
             // The app checks `min <= max`; a bad range still must not trap here.
             CraftNumberView(
                 id: id, label: label, value: value, range: min <= max ? min...max : min...min, step: step, unit: unit,
-                panel: panel, send: send)
+                scale: scale, panel: panel, send: send)
                 .disabled(!enabled)
         case let .toggle(id, label, value, enabled):
             CraftToggleView(id: id, label: label, value: value, panel: panel, send: send)
@@ -108,9 +108,10 @@ extension CraftPanel {
         .malformed(type: "number"),
     ])
 
-    /// A tool popover with a menu choice and stepped numbers, for previews.
+    /// A tool popover with a menu choice, stepped numbers (Size on a log scale) and a collapsed
+    /// section, for previews.
     static let previewBrush = CraftPanel(id: "brush", title: "Brush", role: .tool, nodes: [
-        .number(id: "size", label: "Size", value: 24, min: 1, max: 500, step: 1, unit: .pixels, enabled: true),
+        .number(id: "size", label: "Size", value: 24, min: 1, max: 5000, step: 1, unit: .pixels, enabled: true, scale: .log),
         .number(id: "angle", label: "Angle", value: 45, min: 0, max: 360, step: 1, unit: .degrees, enabled: false),
         .choice(id: "tip", label: "Tip", value: "round", options: [
             .init(id: "round", label: "Round"), .init(id: "square", label: "Square"), .init(id: "chalk", label: "Chalk"),

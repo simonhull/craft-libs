@@ -11,6 +11,48 @@ import Testing
         #expect(CraftNumberView.snap(1.5, step: nil, in: 0...1) == 1)
     }
 
+    /// A log slider: position t in 0...1 is `min·(max/min)^t`, so the middle of 1...5000 is √5000.
+    @Test func aLogSliderSpreadsTheRangeByRatio() {
+        let range = 1.0...5000.0
+        #expect(CraftNumberView.value(atPosition: 0, in: range, scale: .log) == 1)
+        #expect(abs(CraftNumberView.value(atPosition: 1, in: range, scale: .log) - 5000) < 1e-9)
+        #expect(abs(CraftNumberView.value(atPosition: 0.5, in: range, scale: .log) - 5000.0.squareRoot()) < 1e-9)
+        #expect(CraftNumberView.position(of: 1, in: range, scale: .log) == 0)
+        #expect(abs(CraftNumberView.position(of: 5000, in: range, scale: .log) - 1) < 1e-12)
+        #expect(abs(CraftNumberView.position(of: 50, in: 1...10000, scale: .log) - log10(50) / 4) < 1e-12)
+    }
+
+    @Test func aLogPositionRoundTrips() {
+        let range = 0.5...5000.0
+        for value in [0.5, 1, 3.7, 24, 999, 5000] {
+            let back = CraftNumberView.value(atPosition: CraftNumberView.position(of: value, in: range, scale: .log), in: range, scale: .log)
+            #expect(abs(back - value) <= value * 1e-12, "\(value) came back as \(back)")
+        }
+    }
+
+    @Test func aLogValueSnapsToTheStepAfterMapping() {
+        let range = 1.0...5000.0
+        let middle = CraftNumberView.value(atPosition: 0.5, in: range, scale: .log)
+        #expect(CraftNumberView.snap(middle, step: 1, in: range) == 71, "√5000 ≈ 70.7")
+        let low = CraftNumberView.value(atPosition: 0.1, in: range, scale: .log)
+        #expect(CraftNumberView.snap(low, step: 1, in: range) == 2, "5000^0.1 ≈ 2.34")
+    }
+
+    /// Positions outside 0...1 stay at the ends; a range a log scale can't spread is linear.
+    @Test func aLogSliderStaysInItsRange() {
+        #expect(CraftNumberView.value(atPosition: -0.2, in: 1...100, scale: .log) == 1)
+        #expect(abs(CraftNumberView.value(atPosition: 1.5, in: 1...100, scale: .log) - 100) < 1e-9)
+        #expect(CraftNumberView.position(of: 0.5, in: 1...100, scale: .log) == 0, "below min")
+        #expect(CraftNumberView.position(of: 4, in: 4...4, scale: .log) == 0, "an empty range")
+        #expect(CraftNumberView.position(of: 5, in: 0...10, scale: .log) == 0.5, "min 0: linear")
+        #expect(CraftNumberView.value(atPosition: 0.5, in: -10...10, scale: .log) == 0, "min below 0: linear")
+    }
+
+    @Test func aLinearSliderIsProportional() {
+        #expect(CraftNumberView.position(of: 25, in: 0...100, scale: .linear) == 0.25)
+        #expect(CraftNumberView.value(atPosition: 0.25, in: 0...100, scale: .linear) == 25)
+    }
+
     static let posix = Locale(identifier: "en_US_POSIX")
 
     @Test func numbersFormatByUnit() {

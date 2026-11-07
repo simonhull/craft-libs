@@ -38,7 +38,9 @@ struct CraftSectionView<Content: View>: View {
     }
 }
 
-/// A value in a range: a slider, with the value beside it; tap the value to type one.
+/// A value in a range: a slider, with the value beside it; tap the value to type one. The slider
+/// moves through positions 0...1, spread over the range by `scale`; values (shown, typed, sent) are
+/// in the number's own units.
 struct CraftNumberView: View {
     let id: String
     let label: String
@@ -46,6 +48,7 @@ struct CraftNumberView: View {
     let range: ClosedRange<Double>
     let step: Double?
     let unit: CraftNode.Unit
+    var scale: CraftNode.Scale = .linear
     let panel: String
     let send: @MainActor (CraftEdit) -> Void
     /// This control's own drag: it lives and dies with the view.
@@ -79,7 +82,12 @@ struct CraftNumberView: View {
                 .accessibilityHint("Type a value")
             }
             // The setter runs only for the user's own input, never when the app's value changes.
-            Slider(value: Binding(get: { shown }, set: slide), in: range) { editing in
+            Slider(
+                value: Binding(
+                    get: { Self.position(of: shown, in: range, scale: scale) },
+                    set: { slide(to: Self.value(atPosition: $0, in: range, scale: scale)) }),
+                in: 0...1
+            ) { editing in
                 if editing {
                     emit(hold.begin(from: value))
                 } else if let step = hold.commit() {
@@ -128,6 +136,28 @@ struct CraftNumberView: View {
     nonisolated static func snap(_ v: Double, step: Double?, in range: ClosedRange<Double>) -> Double {
         let snapped = step.flatMap { $0.isFinite && $0 > 0 ? $0 * (v / $0).rounded() : nil } ?? v
         return min(max(snapped, range.lowerBound), range.upperBound)
+    }
+
+    /// Where `v` sits on the slider, 0...1. On a log scale `v = min·(max/min)^t`; a range a log
+    /// scale can't spread (`min <= 0`) is linear; an empty range is 0.
+    nonisolated static func position(of v: Double, in range: ClosedRange<Double>, scale: CraftNode.Scale) -> Double {
+        let (lo, hi) = (range.lowerBound, range.upperBound)
+        guard hi > lo else { return 0 }
+        let t = isLog(scale, range) ? log(v / lo) / log(hi / lo) : (v - lo) / (hi - lo)
+        return t.isFinite ? min(max(t, 0), 1) : 0
+    }
+
+    /// The value at slider position `t` (kept in 0...1), before any step snaps it: the inverse of
+    /// ``position(of:in:scale:)``.
+    nonisolated static func value(atPosition t: Double, in range: ClosedRange<Double>, scale: CraftNode.Scale) -> Double {
+        let (lo, hi) = (range.lowerBound, range.upperBound)
+        let t = min(max(t.isFinite ? t : 0, 0), 1)
+        let v = isLog(scale, range) ? lo * pow(hi / lo, t) : lo + t * (hi - lo)
+        return min(max(v, lo), hi)
+    }
+
+    private nonisolated static func isLog(_ scale: CraftNode.Scale, _ range: ClosedRange<Double>) -> Bool {
+        scale == .log && range.lowerBound > 0
     }
 
     /// The value as shown, in `locale`, never grouped (so it can fill the typing field and parse back).

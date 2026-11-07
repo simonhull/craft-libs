@@ -192,6 +192,25 @@ pub enum Unit {
     Degrees,
 }
 
+/// How a number's slider spreads its range.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Scale {
+    /// Equal distances are equal differences.
+    #[default]
+    Linear,
+    /// Equal distances are equal ratios, so a wide range (a brush of 1–5000 px) keeps room for
+    /// its small values. Needs `min > 0`.
+    Log,
+}
+
+impl Scale {
+    #[expect(clippy::trivially_copy_pass_by_ref, reason = "serde's `skip_serializing_if` passes a reference")]
+    fn is_linear(&self) -> bool {
+        *self == Self::Linear
+    }
+}
+
 /// A continuous value in a range.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(try_from = "NumberRepr")]
@@ -202,6 +221,9 @@ pub struct Number {
     min: f64,
     max: f64,
     step: Option<f64>,
+    /// Left out of the JSON when linear.
+    #[serde(skip_serializing_if = "Scale::is_linear")]
+    scale: Scale,
     unit: Unit,
     enabled: bool,
 }
@@ -218,7 +240,20 @@ impl Number {
             return Err(UiError::EmptyRange { id: id.0 });
         }
         let value = if value.is_finite() { value.clamp(min, max) } else { min };
-        Ok(Self { id, label: label.into(), value, min, max, step: None, unit: Unit::None, enabled: true })
+        Ok(Self { id, label: label.into(), value, min, max, step: None, scale: Scale::Linear, unit: Unit::None, enabled: true })
+    }
+
+    /// How the slider spreads the range ([`Scale::Linear`] unless set). The value and the edits
+    /// stay in the number's own units either way.
+    ///
+    /// # Errors
+    /// [`UiError::LogScaleNeedsPositiveMin`] for [`Scale::Log`] when `min <= 0`.
+    pub fn scale(mut self, scale: Scale) -> Result<Self, UiError> {
+        if scale == Scale::Log && self.min <= 0.0 {
+            return Err(UiError::LogScaleNeedsPositiveMin { id: self.id.0 });
+        }
+        self.scale = scale;
+        Ok(self)
     }
 
     /// Its unit.
@@ -258,6 +293,8 @@ struct NumberRepr {
     min: f64,
     max: f64,
     step: Option<f64>,
+    #[serde(default)]
+    scale: Scale,
     unit: Unit,
     enabled: bool,
 }
@@ -266,7 +303,7 @@ impl TryFrom<NumberRepr> for Number {
     type Error = UiError;
 
     fn try_from(r: NumberRepr) -> Result<Self, UiError> {
-        let mut n = Self::new(r.id, r.label, r.min..=r.max, r.value)?.unit(r.unit).enabled(r.enabled);
+        let mut n = Self::new(r.id, r.label, r.min..=r.max, r.value)?.scale(r.scale)?.unit(r.unit).enabled(r.enabled);
         if let Some(step) = r.step {
             n = n.step(step);
         }
@@ -457,6 +494,44 @@ mod tests {
         assert_eq!(Number::new("a", "A", 1.0..=0.0, 0.5).unwrap_err(), UiError::EmptyRange { id: "a".into() });
         assert_eq!(Number::new("a", "A", 0.0..=f64::NAN, 0.5).unwrap_err(), UiError::EmptyRange { id: "a".into() });
         assert!((Number::new("a", "A", 0.0..=1.0, 3.0).unwrap().value() - 1.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn a_log_number_says_so_and_a_linear_one_says_nothing() {
+        let size = Number::new("size", "Size", 1.0..=5000.0, 24.0).unwrap().step(1.0).unit(Unit::Pixels).scale(Scale::Log).unwrap();
+        assert_eq!(
+            serde_json::to_value(Node::Number(size)).unwrap(),
+            json!({"type": "number", "id": "size", "label": "Size", "value": 24.0, "min": 1.0, "max": 5000.0, "step": 1.0, "scale": "log", "unit": "pixels", "enabled": true})
+        );
+        let linear = Number::new("a", "A", 1.0..=2.0, 1.0).unwrap().scale(Scale::Linear).unwrap();
+        assert!(serde_json::to_value(Node::Number(linear)).unwrap().get("scale").is_none(), "linear is the default, left out");
+    }
+
+    #[test]
+    fn a_log_scale_needs_a_positive_range() {
+        for range in [0.0..=10.0, -5.0..=10.0] {
+            assert_eq!(
+                Number::new("a", "A", range, 1.0).unwrap().scale(Scale::Log).unwrap_err(),
+                UiError::LogScaleNeedsPositiveMin { id: "a".into() }
+            );
+        }
+        assert!(Number::new("a", "A", 0.0..=10.0, 1.0).unwrap().scale(Scale::Linear).is_ok());
+        assert!(Number::new("a", "A", 0.01..=10.0, 1.0).unwrap().scale(Scale::Log).is_ok());
+    }
+
+    #[test]
+    fn deserializing_a_scale_validates_it_and_defaults_to_linear() {
+        let number = |extra: serde_json::Value| {
+            let mut n = json!({"type": "number", "id": "a", "label": "A", "value": 1.0, "min": 0.0, "max": 10.0, "step": null, "unit": "none", "enabled": true});
+            if let (Some(n), Some(extra)) = (n.as_object_mut(), extra.as_object()) {
+                n.extend(extra.clone());
+            }
+            serde_json::from_value::<Node>(n)
+        };
+        assert_eq!(number(json!({})).unwrap(), Node::Number(Number::new("a", "A", 0.0..=10.0, 1.0).unwrap()));
+        assert!(number(json!({"scale": "log"})).is_err(), "min 0 can't be logarithmic");
+        assert!(number(json!({"scale": "log", "min": 1.0})).is_ok());
+        assert!(number(json!({"scale": "spiral", "min": 1.0})).is_err());
     }
 
     #[test]
