@@ -8,12 +8,13 @@
 // mod catalogue;
 mod edit;
 mod node;
-// mod publish;
+mod publish;
 
 // pub use catalogue::{catalogue_json, catalogue_markdown};
 pub use edit::{Edit, EditValue, Message, Phase, Position};
 pub use node::{Choice, ChoiceOption, ControlId, ItemList, Node, Number, Panel, PanelId, PanelInfo, PanelRole, Row, Section, Toggle, Unit};
-// pub(crate) use publish::PanelsState;
+#[expect(unused_imports, reason = "wired to the host in the next commit")]
+pub(crate) use publish::PanelsState;
 
 /// A node that can't be built as asked.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
