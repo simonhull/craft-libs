@@ -42,6 +42,8 @@ final class GalleryStore {
 
     private(set) var entries: [Entry] = []
     private(set) var chrome: [Chrome] = []
+    /// The catalogue's status, as the app would set it.
+    var status = CraftStatus()
     /// Why the catalogue didn't load, if it didn't.
     private(set) var problem: String?
     /// One edit as sent.
@@ -68,6 +70,9 @@ final class GalleryStore {
             chrome = catalogue.chrome
             if let menus = chrome.first(where: { $0.name == "menu_bar" }) {
                 CraftMenus.shared.update(try JSONDecoder().decode(CraftMenuBar.self, from: menus.example.data))
+            }
+            if let status = chrome.first(where: { $0.name == "status" }) {
+                self.status = try JSONDecoder().decode(CraftStatus.self, from: status.example.data)
             }
             CraftMenus.shared.send = { [weak self] message in self?.logMessage(message) }
         } catch {

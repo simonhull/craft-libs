@@ -97,6 +97,10 @@ public struct CraftShell: View {
                 // While typing, the keyboard is the toolbar.
                 if chrome || nativePanels || menus, !bridge.keyboardVisible { toolbar.padding(.bottom, 20).transition(.opacity) }
             }
+            .overlay {
+                // A toast at the top, progress above the toolbar; the space between takes no touches.
+                if status { CraftShellStatus(bridge: bridge) }
+            }
             .overlay(alignment: .leading) {
                 if rail { CraftShellRail(bridge: bridge, options: $railOptions).padding(.leading, 12) }
             }
@@ -306,6 +310,15 @@ struct CraftShellMenus: View {
                 .padding(6)
                 .glassEffect(.regular.interactive(), in: .circle)
         }
+    }
+}
+
+/// The app's status over the canvas. Only this view reads it, so a change redraws it alone.
+struct CraftShellStatus: View {
+    let bridge: CraftBridge
+
+    var body: some View {
+        CraftStatusView(status: bridge.status, command: bridge.command)
     }
 }
 

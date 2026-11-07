@@ -100,6 +100,8 @@ public final class CraftBridge {
     /// Whether the app has described its panels since the shell last said which are on screen:
     /// until then a shown panel without a description is still coming; after, it isn't.
     private(set) var describedSinceShowing = false
+    /// What the app is telling the user (wire kind 16): a message, and a job's progress.
+    public private(set) var status = CraftStatus()
     /// A panel the app asked to open (wire kind 14), until the shell has opened it (or found it
     /// isn't offered) and cleared it with ``openRequestHandled()``.
     private(set) var openRequest: CraftOpenPanelRequest?
@@ -476,6 +478,13 @@ public final class CraftBridge {
                 CraftMenus.shared.update(try JSONDecoder().decode(CraftMenuBar.self, from: Data(text.utf8)))
             } catch {
                 craftLog.error("menus didn't decode, kept the last ones: \(error, privacy: .public)")
+            }
+        case 16:
+            do {
+                let decoded = try JSONDecoder().decode(CraftStatus.self, from: Data(text.utf8))
+                if decoded != status { status = decoded }
+            } catch {
+                craftLog.error("the status didn't decode, kept the last one: \(error, privacy: .public)")
             }
         default:
             break

@@ -86,6 +86,7 @@ mod node;
 mod publish;
 mod rail;
 mod shell;
+mod status;
 
 pub use catalogue::{catalogue_json, catalogue_markdown};
 pub use command::{CommandId, Shortcut};
@@ -98,6 +99,7 @@ pub(crate) use publish::PanelsState;
 use publish::Published;
 pub use rail::{Icon, Tool, ToolId, ToolPalette, ToolSlot};
 pub use shell::{Feature, ShellFeatures, UnknownFeature};
+pub use status::{Progress, Status, StatusMessage, Tone};
 
 /// A node that can't be built as asked.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]

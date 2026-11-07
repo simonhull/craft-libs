@@ -46,6 +46,8 @@ struct GalleryApp: App {
                 store: store, panel: store.everythingPanel(role:))
         } else if selection == "menu_bar", let chrome = store.chrome.first(where: { $0.id == "menu_bar" }) {
             GalleryMenuDetail(about: chrome.about, store: store)
+        } else if selection == "status", let chrome = store.chrome.first(where: { $0.id == "status" }) {
+            GalleryStatusDetail(about: chrome.about, store: store)
         } else if selection == "tool_palette", let entry = store.entries.first(where: { $0.id == selection }) {
             GalleryDetail(title: entry.name, about: entry.about, store: store) { store.panel(for: entry, role: $0) }
                 .overlay(alignment: .leading) { GalleryRail(store: store).padding(.leading, 16) }
@@ -201,6 +203,34 @@ struct GalleryRail: View {
             ) { id in
                 CraftPanelView(panel: store.optionsPanel(id), send: store.send)
             }
+        }
+    }
+}
+
+/// The status: the catalogue's example over the detail, as the shell shows it over the canvas, with
+/// buttons that play the app setting a new message or a job. Cancel is logged.
+struct GalleryStatusDetail: View {
+    let about: String
+    @Bindable var store: GalleryStore
+
+    var body: some View {
+        List {
+            Section { Text(about) }
+            Section("The App Says") {
+                Button("Saved") { store.status = CraftStatus(message: .init(text: "Saved a.psd"), progress: store.status.progress) }
+                Button("Error") { store.status = CraftStatus(message: .init(text: "Couldn't open b.psd: not a Photoshop file", tone: .error), progress: store.status.progress) }
+                Button("Start a Job") { store.status = CraftStatus(message: store.status.message, progress: .init(label: "Exporting a.png", fraction: 0.4, cancel: "job.cancel")) }
+                Button("Finish the Job") { store.status = CraftStatus(message: store.status.message) }
+            }
+            Section("Sent") {
+                ForEach(store.log) { sent in
+                    Text(sent.json).font(.caption.monospaced()).textSelection(.enabled)
+                }
+            }
+        }
+        .navigationTitle("status")
+        .overlay {
+            CraftStatusView(status: store.status) { store.logMessage(CraftChromeMessage.command($0)) }
         }
     }
 }

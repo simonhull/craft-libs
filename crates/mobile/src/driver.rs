@@ -83,6 +83,8 @@ pub(crate) struct Driver<W, S> {
     panels: Option<String>,
     /// The last menu bar, for a shell that starts listening later.
     menus: Option<String>,
+    /// The last status, for a shell that starts listening later.
+    status: Option<String>,
     /// Whether the app last said it was busy: then it runs without a window too.
     busy: bool,
     /// The device's last power state, for an app that starts after the shell reported it.
@@ -91,7 +93,18 @@ pub(crate) struct Driver<W, S> {
 
 impl<W, S> Default for Driver<W, S> {
     fn default() -> Self {
-        Self { window: None, shell: None, picked: Vec::new(), early: Vec::new(), state: None, panels: None, menus: None, busy: false, power: None }
+        Self {
+            window: None,
+            shell: None,
+            picked: Vec::new(),
+            early: Vec::new(),
+            state: None,
+            panels: None,
+            menus: None,
+            status: None,
+            busy: false,
+            power: None,
+        }
     }
 }
 
@@ -131,6 +144,7 @@ impl<W: Window, S: Shell> Driver<W, S> {
                 self.state = None;
                 self.panels = None;
                 self.menus = None;
+                self.status = None;
                 self.busy = false;
             }
             Message::Shell(shell) => {
@@ -145,6 +159,9 @@ impl<W: Window, S: Shell> Driver<W, S> {
                     }
                     if let Some(json) = &self.menus {
                         shell.deliver(&Request::Menus(json.clone()));
+                    }
+                    if let Some(json) = &self.status {
+                        shell.deliver(&Request::Status(json.clone()));
                     }
                 }
             }
@@ -218,6 +235,7 @@ impl<W: Window, S: Shell> Driver<W, S> {
                 Request::State(json) => self.state = Some(json.clone()),
                 Request::Panels(json) => self.panels = Some(json.clone()),
                 Request::Menus(json) => self.menus = Some(json.clone()),
+                Request::Status(json) => self.status = Some(json.clone()),
                 Request::Busy(busy) => self.busy = *busy,
                 _ => {}
             }
@@ -480,14 +498,14 @@ mod tests {
     }
 
     #[test]
-    fn a_late_shell_still_sees_the_menus() {
+    fn a_late_shell_still_sees_the_menus_and_the_status() {
         let mut driver = TestDriver::default();
         attach(&mut driver);
-        SEEN.with(|s| s.borrow_mut().requests = vec![Request::Menus(r#"{"menus":[]}"#.into())]);
+        SEEN.with(|s| s.borrow_mut().requests = vec![Request::Menus(r#"{"menus":[]}"#.into()), Request::Status("{}".into())]);
         driver.frame();
         let shell = FakeShell::default();
         driver.handle(Message::Shell(Some(shell.clone())));
-        assert_eq!(shell.heard(), [r#"Menus("{\"menus\":[]}")"#]);
+        assert_eq!(shell.heard(), [r#"Menus("{\"menus\":[]}")"#, r#"Status("{}")"#]);
     }
 
     /// Opening a panel is a one-shot: a shell that starts listening later must not open it again.

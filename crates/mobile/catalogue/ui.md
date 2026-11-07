@@ -384,3 +384,31 @@ For example:
 {"action":"command","id":"image.flip_horizontal"}
 {"action":"shortcut","keys":"Cmd+Z"}
 ```
+
+### `status` (request kind 16)
+
+What the app is telling the user: a message as a transient toast at the top (red for an error), and a long job as a progress capsule with a Cancel button. `Platform::set_status` sends it whenever it changes (request kind 16), and again when the shell restarts.
+
+**Fields:** `message` (`null` for none): its `text` and its `tone`, `info` or `error`; a new message shows again, the same one stays dismissed. `progress` (`null` for none): a `label`, a `fraction` from 0 to 1 (`null` while unknown) and `cancel`, a command id or `null` for a job that can't be stopped.
+
+```json
+{
+  "message": {
+    "text": "Couldn't open b.psd: not a Photoshop file",
+    "tone": "error"
+  },
+  "progress": {
+    "label": "Exporting a.png",
+    "fraction": 0.4,
+    "cancel": "job.cancel"
+  }
+}
+```
+
+**Sends:** the `cancel` command when the user taps Cancel.
+
+For example:
+
+```json
+{"action":"command","id":"job.cancel"}
+```

@@ -51,6 +51,24 @@ import UIKit
         }
     }
 
+    /// A message, an error, and a job with Cancel, as the status shows them over the canvas.
+    @available(iOS, deprecated: 26, message: "Renders in a scene-less window")
+    @Test func status() throws {
+        let preview = CraftStatus.preview
+        for v in Self.variants.prefix(2) {
+            let view = VStack(spacing: 16) {
+                CraftStatusToast(message: .init(text: "Saved a.psd"))
+                if let error = preview.message { CraftStatusToast(message: error) }
+                if let progress = preview.progress { CraftProgressCapsule(progress: progress, command: { _ in }) }
+                CraftProgressCapsule(progress: .init(label: "Opening b.psd"), command: { _ in })
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(white: 0.5))
+            let png = try Self.render(view, style: v.style, size: CGSize(width: 420, height: 560))
+            try Self.check(png, "status-\(v.name)-\(Self.runtime)")
+        }
+    }
+
     /// The comparison must catch a one-value change: the Layers panel with Opacity at 50 % instead
     /// of 80 %, or with one row renamed (text alone, a few hundred pixels), is not its reference.
     @available(iOS, deprecated: 26, message: "Renders in a scene-less window")

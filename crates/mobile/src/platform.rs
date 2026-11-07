@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::OnceLock;
 
-use crate::ui::{MenuBar, PanelId};
+use crate::ui::{MenuBar, PanelId, Status};
 
 /// Where the app keeps its own data (recovery files, settings), set once by the shell before the
 /// app starts: Application Support on iOS, `filesDir` on Android.
@@ -198,6 +198,8 @@ pub(crate) enum Request {
     /// The app's menu bar ([`MenuBar`] as JSON), sent when it changes and again when the shell
     /// restarts.
     Menus(String),
+    /// The app's status ([`Status`] as JSON), sent when it changes and again when the shell restarts.
+    Status(String),
 }
 
 impl Request {
@@ -221,6 +223,7 @@ impl Request {
     /// | 13   | native panels | the panels as JSON (`ui`)      | —        |
     /// | 14   | open a panel  | the panel's id                 | —        |
     /// | 15   | menus         | the menu bar as JSON (`ui`)    | —        |
+    /// | 16   | status        | the status as JSON (`ui`)      | —        |
     ///
     /// Kind 10 is answered with the clipboard's contents (`craft_paste_*`, `CraftNative.paste*`),
     /// text first while a text field is focused, else an image first; an image the app copied
@@ -250,6 +253,7 @@ impl Request {
             Request::Panels(json) => (13, json.as_str().into(), None),
             Request::OpenPanel(id) => (14, id.as_str().into(), None),
             Request::Menus(json) => (15, json.as_str().into(), None),
+            Request::Status(json) => (16, json.as_str().into(), None),
         }
     }
 }
@@ -268,6 +272,8 @@ struct Shared {
     pasted: Option<Rc<Pasted>>,
     /// The menu bar last sent, and its JSON, for a shell that restarts.
     menu: Option<(MenuBar, String)>,
+    /// The status last sent, and its JSON, for a shell that restarts.
+    status: Option<(Status, String)>,
 }
 
 /// The app's handle on the native shell. Cheap to clone; everything runs on the app's thread.
@@ -395,13 +401,35 @@ impl Platform {
         }
     }
 
-    /// The shell restarted: send it the menus again.
+    /// Show `status` in the shell's native status (when it declared [`crate::ui::Feature::Status`]):
+    /// a message as a toast when it changes, progress while it lasts. Call it whenever the status may
+    /// have changed, every frame if that's simplest: only a change is sent, and a shell that restarts
+    /// gets the last one again.
+    pub fn set_status(&self, status: Status) {
+        let mut shared = self.shared.borrow_mut();
+        if shared.status.as_ref().is_some_and(|(sent, _)| *sent == status) {
+            return;
+        }
+        match serde_json::to_string(&status) {
+            Ok(json) => {
+                shared.out.push(Request::Status(json.clone()));
+                shared.status = Some((status, json));
+            }
+            Err(e) => log::error!("craft-mobile: status: {e}"),
+        }
+    }
+
+    /// The shell restarted: send it the menus and the status again.
     pub(crate) fn resend_chrome(&self) {
         let mut shared = self.shared.borrow_mut();
-        if let Some((_, json)) = &shared.menu {
-            let json = json.clone();
-            shared.out.push(Request::Menus(json));
-        }
+        let again: Vec<Request> = [
+            shared.menu.as_ref().map(|(_, json)| Request::Menus(json.clone())),
+            shared.status.as_ref().map(|(_, json)| Request::Status(json.clone())),
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+        shared.out.extend(again);
     }
 
     /// Open a link in the system browser (or the app that handles it).
@@ -595,6 +623,24 @@ mod tests {
         assert_eq!(wired(&platform), first, "the shell restarted");
         platform.set_menu(menu("Undo Brush"));
         assert_eq!(wired(&platform).len(), 1);
+    }
+
+    /// Kind 16, only when the status changed, and again (after the menus) for a shell that restarts.
+    #[test]
+    fn status_goes_out_as_kind_16_when_it_changes_and_again_on_a_restart() {
+        use crate::ui::Progress;
+        let platform = Platform::default();
+        platform.set_status(Status::new().info("Saved"));
+        let first = wired(&platform);
+        assert!(first.first().is_some_and(|(k, t)| *k == 16 && t.contains("Saved")), "{first:?}");
+        platform.set_status(Status::new().info("Saved"));
+        assert!(wired(&platform).is_empty(), "unchanged");
+        platform.set_status(Status::new().info("Saved").progress(Progress::new("Exporting").fraction(0.5)));
+        assert_eq!(wired(&platform).len(), 1);
+        platform.set_menu(menu("Undo"));
+        let _ = wired(&platform);
+        platform.resend_chrome();
+        assert_eq!(wired(&platform).iter().map(|(k, _)| *k).collect::<Vec<_>>(), [15, 16]);
     }
 
     #[test]
