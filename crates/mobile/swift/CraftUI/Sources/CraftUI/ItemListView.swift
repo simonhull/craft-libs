@@ -115,14 +115,28 @@ struct CraftItemListView: View {
     }
 
     /// SwiftUI gives a destination index in the list before the move; the app wants "above or below a
-    /// row". `nil` when the drop leaves the row where it was.
+    /// row". The list is flat, a row's `depth` its nesting, so:
+    /// - A row's subtree (the rows after it that are deeper) moves with it in the app, so a drop
+    ///   between its own descendants, or just below the last of them, is refused: a group can't go
+    ///   inside itself.
+    /// - Past the last row is the bottom of the top level: below the outermost group the list ends in
+    ///   (the last top-level row), not inside it after its last child.
+    /// - Anywhere else is above the row the drop lands before.
+    ///
+    /// A drop where the row was sends nothing, the last row's too (SwiftUI can't tell that from past
+    /// the end), so it stays in its group.
+    ///
+    /// `nil` when the drop is refused or leaves the row where it was.
     nonisolated static func moveEdit(_ rows: [CraftRow], from source: IndexSet, to destination: Int) -> CraftEdit.Value? {
         guard source.count == 1, let from = source.first, destination != from, destination != from + 1,
               let row = rows[safe: from] else { return nil }
+        let subtreeEnd = rows[(from + 1)...].firstIndex { $0.depth <= row.depth } ?? rows.endIndex
+        if destination > from, destination <= subtreeEnd { return nil }
         if let below = rows[safe: destination] {
             return .move(row: row.id, target: below.id, position: .above)
         }
-        guard let last = rows.last, last.id != row.id else { return nil }
+        let minDepth = rows.map(\.depth).min() ?? 0
+        guard let last = rows.last(where: { $0.depth == minDepth }), last.id != row.id else { return nil }
         return .move(row: row.id, target: last.id, position: .below)
     }
 }

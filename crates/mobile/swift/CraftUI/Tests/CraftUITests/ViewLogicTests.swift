@@ -121,6 +121,38 @@ import Testing
         #expect(CraftItemListView.moveEdit(Self.rows, from: [7], to: 0) == nil)
     }
 
+    /// A, then group G with children c1 and c2.
+    static let grouped = [
+        CraftRow(id: 30, title: "A"), CraftRow(id: 20, title: "G"),
+        CraftRow(id: 21, title: "c1", depth: 1), CraftRow(id: 22, title: "c2", depth: 1),
+    ]
+
+    @Test func aRowCantBeDroppedIntoItsOwnSubtree() {
+        #expect(CraftItemListView.moveEdit(Self.grouped, from: [1], to: 3) == nil, "between its children")
+        #expect(CraftItemListView.moveEdit(Self.grouped, from: [1], to: 4) == nil, "below its last child")
+        #expect(CraftItemListView.moveEdit(Self.grouped, from: [1], to: 0) == .move(row: 20, target: 30, position: .above))
+        let nested = [
+            CraftRow(id: 40, title: "O"), CraftRow(id: 41, title: "G", depth: 1), CraftRow(id: 42, title: "c", depth: 2),
+            CraftRow(id: 43, title: "X"),
+        ]
+        #expect(CraftItemListView.moveEdit(nested, from: [1], to: 3) == nil, "below its own child, still inside O")
+        #expect(CraftItemListView.moveEdit(nested, from: [2], to: 1) == .move(row: 42, target: 41, position: .above), "a child out above its group")
+    }
+
+    /// Past the last row is the bottom of the top level: below the outermost group the list ends in,
+    /// not inside it after its last child.
+    @Test func aDropPastTheEndLandsBelowTheOutermostGroup() {
+        #expect(CraftItemListView.moveEdit(Self.grouped, from: [0], to: 4) == .move(row: 30, target: 20, position: .below))
+        #expect(CraftItemListView.moveEdit(Self.grouped, from: [2], to: 4) == .move(row: 21, target: 20, position: .below), "a child out of its group")
+        let nested = [
+            CraftRow(id: 40, title: "O"), CraftRow(id: 41, title: "G", depth: 1), CraftRow(id: 42, title: "c", depth: 2),
+            CraftRow(id: 44, title: "d", depth: 1),
+        ]
+        #expect(CraftItemListView.moveEdit(nested, from: [2], to: 4) == .move(row: 42, target: 40, position: .below), "out of both groups")
+        #expect(CraftItemListView.moveEdit(nested, from: [3], to: 4) == nil, "the last row dropped where it was stays in its group")
+        #expect(CraftItemListView.moveEdit(nested, from: [0], to: 4) == nil, "the outermost group is already last")
+    }
+
     /// A plain tap selects one row; in multi-select every tap adds or removes one; with a keyboard,
     /// Command-tap adds or removes and Shift-tap selects a range, as the desktop's Layers panel does.
     @Test func aTapSelectsByModeAndModifiers() {
