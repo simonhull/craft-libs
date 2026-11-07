@@ -66,6 +66,23 @@ enum JSONValue: Decodable, Equatable {
         #expect(panels.open["layers"]?.nodes == [.toggle(id: "visible", label: "Visible", value: true, enabled: true)])
     }
 
+    /// One bad node shows as a placeholder; the rest of the panel, and the other panels, still show.
+    @Test func aMalformedNodeBecomesAPlaceholder() throws {
+        let json = #"""
+        {"id":"layers","title":"Layers","role":"inspector","nodes":[
+          {"type":"toggle","id":"bad","label":"No value","enabled":true},
+          {"type":"section","id":"s","title":"S","collapsed":false,"children":[
+            {"type":"number","id":"n","label":"No range","value":1,"unit":"none","enabled":true}, 7]},
+          {"type":"toggle","id":"ok","label":"Fine","value":true,"enabled":true}]}
+        """#
+        let panel = try JSONDecoder().decode(CraftPanel.self, from: Data(json.utf8))
+        #expect(panel.nodes == [
+            .unknown(type: "toggle"),
+            .section(id: "s", title: "S", collapsed: false, children: [.unknown(type: "number"), .unknown(type: "")]),
+            .toggle(id: "ok", label: "Fine", value: true, enabled: true),
+        ])
+    }
+
     @Test func anUnknownNodeBecomesAPlaceholder() throws {
         let node = try JSONDecoder().decode(CraftNode.self, from: Data(#"{"type":"hologram","id":"x"}"#.utf8))
         #expect(node == .unknown(type: "hologram"))

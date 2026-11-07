@@ -54,6 +54,7 @@ struct CraftNodeView: View {
     }
 }
 
+#if DEBUG
 #Preview("Layers inspector") {
     NavigationStack {
         CraftPanelView(panel: .previewLayers, send: { print($0) })
@@ -103,3 +104,4 @@ extension CraftPanel {
         ]),
     ])
 }
+#endif

@@ -26,6 +26,15 @@ public struct CraftPanel: Decodable, Equatable, Identifiable, Sendable {
     public init(id: String, title: String, role: CraftPanelInfo.Role, nodes: [CraftNode]) {
         (self.id, self.title, self.role, self.nodes) = (id, title, role, nodes)
     }
+
+    private enum Key: String, CodingKey { case id, title, role, nodes }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: Key.self)
+        self = try CraftPanel(
+            id: c.decode(String.self, forKey: .id), title: c.decode(String.self, forKey: .title),
+            role: c.decode(CraftPanelInfo.Role.self, forKey: .role), nodes: CraftNode.decodeEach(c, forKey: .nodes))
+    }
 }
 
 /// Everything the app sent: its panels, and the open ones described (wire kind 13).
@@ -64,8 +73,11 @@ public struct CraftRow: Decodable, Equatable, Identifiable, Sendable {
     }
 }
 
-/// One primitive (`ui::Node`). A type this kit doesn't know decodes as `.unknown`.
+/// One primitive (`ui::Node`). A type this kit doesn't know, or a node that doesn't decode, becomes
+/// `.unknown`: in a list of nodes, one bad node never takes the panel down with it.
 public indirect enum CraftNode: Decodable, Equatable, Sendable {
+    /// A titled group. `collapsed` is only how it starts: after it first appears, collapsing is the
+    /// user's, until the panel's views are built again (the panel closed and reopened).
     case section(id: String, title: String, collapsed: Bool, children: [CraftNode])
     case number(id: String, label: String, value: Double, min: Double, max: Double, step: Double?, unit: Unit, enabled: Bool)
     case toggle(id: String, label: String, value: Bool, enabled: Bool)
@@ -93,7 +105,7 @@ public indirect enum CraftNode: Decodable, Equatable, Sendable {
         case "section":
             self = try .section(
                 id: c.decode(String.self, forKey: .id), title: c.decode(String.self, forKey: .title),
-                collapsed: c.decode(Bool.self, forKey: .collapsed), children: c.decode([CraftNode].self, forKey: .children))
+                collapsed: c.decode(Bool.self, forKey: .collapsed), children: Self.decodeEach(c, forKey: .children))
         case "number":
             self = try .number(
                 id: c.decode(String.self, forKey: .id), label: c.decode(String.self, forKey: .label),
@@ -115,6 +127,27 @@ public indirect enum CraftNode: Decodable, Equatable, Sendable {
                 reorderable: c.decode(Bool.self, forKey: .reorderable))
         default:
             self = .unknown(type: type)
+        }
+    }
+
+    /// A list of nodes, each decoded on its own: one that fails becomes `.unknown` with its `type`
+    /// (empty if it has none) instead of failing the list.
+    static func decodeEach<K: CodingKey>(_ c: KeyedDecodingContainer<K>, forKey key: K) throws -> [CraftNode] {
+        try c.decode([Lenient].self, forKey: key).map(\.node)
+    }
+
+    /// Decodes one element of a list whatever it holds, so the list moves past it.
+    private struct Lenient: Decodable {
+        let node: CraftNode
+
+        private struct Probe: Decodable { let type: String? }
+
+        init(from decoder: any Decoder) {
+            if let node = try? CraftNode(from: decoder) {
+                self.node = node
+            } else {
+                node = .unknown(type: ((try? Probe(from: decoder))?.type) ?? "")
+            }
         }
     }
 

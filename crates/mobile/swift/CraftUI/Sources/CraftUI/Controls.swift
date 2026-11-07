@@ -1,6 +1,8 @@
 import SwiftUI
 
-/// A titled group the user can collapse. `collapsed` is only how it starts: after that it's the user's.
+/// A titled group the user can collapse. `collapsed` is only how it starts: after the section first
+/// appears, collapsing is the user's, and it resets to `collapsed` when the panel's views are built
+/// again (the panel closed and reopened).
 struct CraftSectionView<Content: View>: View {
     let title: String
     @State private var expanded: Bool
@@ -50,21 +52,30 @@ struct CraftNumberView: View {
     @State private var hold = GestureHold()
     @State private var typing = false
     @State private var typed = ""
+    @Environment(\.locale) private var locale
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         let shown = hold.shown(app: value)
+        let formatted = Self.format(shown, unit, locale: locale)
+        // At accessibility sizes the label and value don't fit side by side: stack them.
+        let header = typeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2)) : AnyLayout(HStackLayout())
         VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text(label)
-                Spacer()
-                Button(Self.format(shown, unit)) {
-                    typed = Self.format(shown, unit, withUnit: false)
+            header {
+                // The button and the slider both say the label: VoiceOver needn't read it a third time.
+                Text(label).accessibilityHidden(true)
+                Spacer(minLength: 0)
+                Button {
+                    typed = Self.format(shown, unit, withUnit: false, locale: locale)
                     typing = true
+                } label: {
+                    Text(formatted).frame(minHeight: 44).contentShape(Rectangle())
                 }
                 .monospacedDigit()
                 .buttonStyle(.borderless)
                 .accessibilityLabel(label)
-                .accessibilityValue(Self.format(shown, unit))
+                .accessibilityValue(formatted)
                 .accessibilityHint("Type a value")
             }
             // The setter runs only for the user's own input, never when the app's value changes.
@@ -76,7 +87,7 @@ struct CraftNumberView: View {
                 }
             }
             .accessibilityLabel(label)
-            .accessibilityValue(Self.format(shown, unit))
+            .accessibilityValue(formatted)
         }
         // Re-described without this control, or the panel closed, mid-drag: put the value back.
         .onDisappear {
@@ -103,8 +114,8 @@ struct CraftNumberView: View {
     }
 
     private func typedValue() {
-        guard let n = Double(typed.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ",", with: ".")), n.isFinite else { return }
-        let v = Self.snap(unit == .percent ? n / 100 : n, step: step, in: range)
+        guard let n = Self.parse(typed, unit: unit, locale: locale) else { return }
+        let v = Self.snap(n, step: step, in: range)
         send(CraftEdit(panel: panel, control: id, phase: .commit, gesture: GestureID.next(), value: .number(v)))
     }
 
@@ -118,13 +129,29 @@ struct CraftNumberView: View {
         return min(max(snapped, range.lowerBound), range.upperBound)
     }
 
-    nonisolated static func format(_ v: Double, _ unit: CraftNode.Unit, withUnit: Bool = true) -> String {
-        switch unit {
-        case .percent: (v * 100).formatted(.number.precision(.fractionLength(0))) + (withUnit ? " %" : "")
-        case .pixels: v.formatted(.number.precision(.fractionLength(0...1))) + (withUnit ? " px" : "")
-        case .degrees: v.formatted(.number.precision(.fractionLength(0))) + (withUnit ? "°" : "")
-        case .none: v.formatted(.number.precision(.fractionLength(0...2)))
+    /// The value as shown, in `locale`, never grouped (so it can fill the typing field and parse back).
+    nonisolated static func format(_ v: Double, _ unit: CraftNode.Unit, withUnit: Bool = true, locale: Locale = .current) -> String {
+        func number(_ x: Double, _ digits: ClosedRange<Int>) -> String {
+            x.formatted(.number.precision(.fractionLength(digits)).grouping(.never).locale(locale))
         }
+        return switch unit {
+        case .percent: number(v * 100, 0...0) + (withUnit ? " %" : "")
+        case .pixels: number(v, 0...1) + (withUnit ? " px" : "")
+        case .degrees: number(v, 0...0) + (withUnit ? "°" : "")
+        case .none: number(v, 0...2)
+        }
+    }
+
+    /// A typed value: read in `locale` (then as plain `1234.5`), ignoring a typed unit; a percentage
+    /// becomes 0...1. `nil` if it isn't a finite number.
+    nonisolated static func parse(_ text: String, unit: CraftNode.Unit, locale: Locale = .current) -> Double? {
+        let bare = ["%", "px", "°"]
+            .reduce(text) { $0.replacingOccurrences(of: $1, with: "") }
+            .trimmingCharacters(in: .whitespaces)
+        guard !bare.isEmpty,
+              let n = (try? Double(bare, format: .number.locale(locale))) ?? Double(bare),
+              n.isFinite else { return nil }
+        return unit == .percent ? n / 100 : n
     }
 }
 

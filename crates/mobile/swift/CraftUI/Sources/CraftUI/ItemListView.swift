@@ -54,18 +54,11 @@ struct CraftItemListView: View {
         .contextMenu {
             Button("Rename…") { startRenaming(row) }
         }
-        // One VoiceOver element per row: activate selects, the rest are named actions.
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(row.subtitle.isEmpty ? row.title : "\(row.title), \(row.subtitle)")
-        .accessibilityValue(row.visible == false ? "Hidden" : "")
-        .accessibilityAddTraits(row.selected ? [.isButton, .isSelected] : .isButton)
-        .accessibilityAction { one(.select(row: row.id)) }
-        .accessibilityActions {
-            if let visible = row.visible {
-                Button(visible ? "Hide" : "Show") { one(.setVisible(row: row.id, visible: !visible)) }
-            }
-            Button("Rename") { startRenaming(row) }
-        }
+        .modifier(RowAccessibility(
+            row: row,
+            select: { one(.select(row: row.id)) },
+            setVisible: { one(.setVisible(row: row.id, visible: $0)) },
+            rename: { startRenaming(row) }))
     }
 
     private func startRenaming(_ row: CraftRow) {
@@ -100,6 +93,32 @@ struct CraftItemListView: View {
     }
 }
 
-extension Array {
+/// One VoiceOver element per row: activating it selects the row; hiding and renaming are named actions.
+private struct RowAccessibility: ViewModifier {
+    let row: CraftRow
+    let select: () -> Void
+    let setVisible: (Bool) -> Void
+    let rename: () -> Void
+
+    func body(content: Content) -> some View {
+        let traits: AccessibilityTraits = row.selected ? [.isButton, .isSelected] : [.isButton]
+        let label = row.subtitle.isEmpty ? row.title : "\(row.title), \(row.subtitle)"
+        content
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(label)
+            .accessibilityValue(row.visible == false ? "Hidden" : "")
+            .accessibilityAddTraits(traits)
+            .accessibilityAction { select() }
+            .accessibilityActions {
+                if let visible = row.visible {
+                    Button(visible ? "Hide" : "Show") { setVisible(!visible) }
+                }
+                Button("Rename", action: rename)
+            }
+    }
+}
+
+// Private: apps compile CraftUI into their own module, where a public-looking `safe:` could clash.
+fileprivate extension Array {
     subscript(safe i: Int) -> Element? { indices.contains(i) ? self[i] : nil }
 }
