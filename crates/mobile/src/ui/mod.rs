@@ -33,4 +33,28 @@ pub enum UiError {
         /// The value given.
         value: String,
     },
+    /// Two options of a choice share an id.
+    #[error("`{id}`: option `{option}` appears twice")]
+    DuplicateOption {
+        /// The control.
+        id: String,
+        /// The repeated option id.
+        option: String,
+    },
+    /// Two controls of a panel share an id.
+    #[error("panel `{panel}`: control `{control}` appears twice")]
+    DuplicateControl {
+        /// The panel.
+        panel: String,
+        /// The repeated control id.
+        control: String,
+    },
+    /// Two rows of a list share an id.
+    #[error("list `{list}`: row {row} appears twice")]
+    DuplicateRow {
+        /// The list control.
+        list: String,
+        /// The repeated row id.
+        row: u64,
+    },
 }

@@ -1,5 +1,6 @@
 //! The primitives a panel is built from.
 
+use std::collections::HashSet;
 use std::ops::RangeInclusive;
 
 use serde::{Deserialize, Serialize};
@@ -13,21 +14,48 @@ pub struct PanelId(pub String);
 
 /// A control's id, unique within its panel and stable across descriptions, so the shell keeps
 /// focus and gestures on it.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct ControlId(pub String);
 
-impl From<&str> for PanelId {
-    fn from(s: &str) -> Self {
-        Self(s.to_owned())
-    }
+macro_rules! id_newtype {
+    ($name:ident) => {
+        impl $name {
+            /// The id as text.
+            #[must_use]
+            pub fn as_str(&self) -> &str {
+                &self.0
+            }
+        }
+
+        impl From<&str> for $name {
+            fn from(s: &str) -> Self {
+                Self(s.to_owned())
+            }
+        }
+
+        impl From<String> for $name {
+            fn from(s: String) -> Self {
+                Self(s)
+            }
+        }
+
+        impl AsRef<str> for $name {
+            fn as_ref(&self) -> &str {
+                &self.0
+            }
+        }
+
+        impl std::fmt::Display for $name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str(&self.0)
+            }
+        }
+    };
 }
 
-impl From<&str> for ControlId {
-    fn from(s: &str) -> Self {
-        Self(s.to_owned())
-    }
-}
+id_newtype!(PanelId);
+id_newtype!(ControlId);
 
 /// How a panel is presented. The shell decides the details per platform and size.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -73,6 +101,40 @@ impl Panel {
     pub fn id(&self) -> &PanelId {
         &self.id
     }
+
+    /// Check the ids the shell relies on: controls are unique within the panel (sections
+    /// included) and rows are unique within their list.
+    ///
+    /// # Errors
+    /// [`UiError::DuplicateControl`] or [`UiError::DuplicateRow`] for the first repeat found.
+    pub fn check(&self) -> Result<(), UiError> {
+        fn walk<'a>(panel: &PanelId, nodes: &'a [Node], seen: &mut HashSet<&'a ControlId>) -> Result<(), UiError> {
+            for node in nodes {
+                let id = match node {
+                    Node::Section(s) => &s.id,
+                    Node::Number(n) => &n.id,
+                    Node::Toggle(t) => &t.id,
+                    Node::Choice(c) => &c.id,
+                    Node::ItemList(l) => &l.id,
+                };
+                if !seen.insert(id) {
+                    return Err(UiError::DuplicateControl { panel: panel.0.clone(), control: id.0.clone() });
+                }
+                match node {
+                    Node::Section(s) => walk(panel, &s.children, seen)?,
+                    Node::ItemList(l) => {
+                        let mut rows = HashSet::new();
+                        if let Some(dup) = l.rows.iter().find(|r| !rows.insert(r.id)) {
+                            return Err(UiError::DuplicateRow { list: id.0.clone(), row: dup.id });
+                        }
+                    }
+                    Node::Number(_) | Node::Toggle(_) | Node::Choice(_) => {}
+                }
+            }
+            Ok(())
+        }
+        walk(&self.id, &self.nodes, &mut HashSet::new())
+    }
 }
 
 /// One primitive.
@@ -103,7 +165,7 @@ pub struct Section {
 impl Section {
     /// An expanded section.
     #[must_use]
-    pub fn new(id: &str, title: impl Into<String>, children: Vec<Node>) -> Self {
+    pub fn new(id: impl Into<ControlId>, title: impl Into<String>, children: Vec<Node>) -> Self {
         Self { id: id.into(), title: title.into(), collapsed: false, children }
     }
 
@@ -132,6 +194,7 @@ pub enum Unit {
 
 /// A continuous value in a range.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(try_from = "NumberRepr")]
 pub struct Number {
     id: ControlId,
     label: String,
@@ -144,17 +207,18 @@ pub struct Number {
 }
 
 impl Number {
-    /// A number in `range`; `value` is clamped into it.
+    /// A number in `range`; `value` is clamped into it (a non-finite `value` becomes `min`).
     ///
     /// # Errors
     /// [`UiError::EmptyRange`] if the range is empty or not finite.
-    pub fn new(id: &str, label: impl Into<String>, range: RangeInclusive<f64>, value: f64) -> Result<Self, UiError> {
+    pub fn new(id: impl Into<ControlId>, label: impl Into<String>, range: RangeInclusive<f64>, value: f64) -> Result<Self, UiError> {
+        let id = id.into();
         let (min, max) = range.into_inner();
         if !(min.is_finite() && max.is_finite() && min <= max) {
-            return Err(UiError::EmptyRange { id: id.to_owned() });
+            return Err(UiError::EmptyRange { id: id.0 });
         }
         let value = if value.is_finite() { value.clamp(min, max) } else { min };
-        Ok(Self { id: id.into(), label: label.into(), value, min, max, step: None, unit: Unit::None, enabled: true })
+        Ok(Self { id, label: label.into(), value, min, max, step: None, unit: Unit::None, enabled: true })
     }
 
     /// Its unit.
@@ -164,7 +228,7 @@ impl Number {
         self
     }
 
-    /// Snap to multiples of `step`.
+    /// Snap to multiples of `step`; a non-positive or non-finite step is ignored.
     #[must_use]
     pub fn step(mut self, step: f64) -> Self {
         self.step = (step.is_finite() && step > 0.0).then_some(step);
@@ -185,6 +249,31 @@ impl Number {
     }
 }
 
+/// [`Number`] as it arrives on the wire, before validation.
+#[derive(Deserialize)]
+struct NumberRepr {
+    id: ControlId,
+    label: String,
+    value: f64,
+    min: f64,
+    max: f64,
+    step: Option<f64>,
+    unit: Unit,
+    enabled: bool,
+}
+
+impl TryFrom<NumberRepr> for Number {
+    type Error = UiError;
+
+    fn try_from(r: NumberRepr) -> Result<Self, UiError> {
+        let mut n = Self::new(r.id, r.label, r.min..=r.max, r.value)?.unit(r.unit).enabled(r.enabled);
+        if let Some(step) = r.step {
+            n = n.step(step);
+        }
+        Ok(n)
+    }
+}
+
 /// On or off.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Toggle {
@@ -197,7 +286,7 @@ pub struct Toggle {
 impl Toggle {
     /// An enabled toggle.
     #[must_use]
-    pub fn new(id: &str, label: impl Into<String>, value: bool) -> Self {
+    pub fn new(id: impl Into<ControlId>, label: impl Into<String>, value: bool) -> Self {
         Self { id: id.into(), label: label.into(), value, enabled: true }
     }
 
@@ -226,6 +315,7 @@ impl ChoiceOption {
 
 /// One of several options.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "ChoiceRepr")]
 pub struct Choice {
     id: ControlId,
     label: String,
@@ -238,13 +328,18 @@ impl Choice {
     /// A choice whose current `value` is one of `options`' ids.
     ///
     /// # Errors
-    /// [`UiError::UnknownOption`] if `value` isn't among them.
-    pub fn new(id: &str, label: impl Into<String>, value: &str, options: impl Into<Vec<ChoiceOption>>) -> Result<Self, UiError> {
+    /// [`UiError::UnknownOption`] if `value` isn't among them, [`UiError::DuplicateOption`] if two options share an id.
+    pub fn new(id: impl Into<ControlId>, label: impl Into<String>, value: &str, options: impl Into<Vec<ChoiceOption>>) -> Result<Self, UiError> {
+        let id = id.into();
         let options = options.into();
-        if !options.iter().any(|o| o.id == value) {
-            return Err(UiError::UnknownOption { id: id.to_owned(), value: value.to_owned() });
+        let mut seen = HashSet::new();
+        if let Some(dup) = options.iter().find(|o| !seen.insert(o.id.as_str())) {
+            return Err(UiError::DuplicateOption { id: id.0, option: dup.id.clone() });
         }
-        Ok(Self { id: id.into(), label: label.into(), value: value.to_owned(), options, enabled: true })
+        if !options.iter().any(|o| o.id == value) {
+            return Err(UiError::UnknownOption { id: id.0, value: value.to_owned() });
+        }
+        Ok(Self { id, label: label.into(), value: value.to_owned(), options, enabled: true })
     }
 
     /// Greyed out when `false`.
@@ -252,6 +347,24 @@ impl Choice {
     pub fn enabled(mut self, enabled: bool) -> Self {
         self.enabled = enabled;
         self
+    }
+}
+
+/// [`Choice`] as it arrives on the wire, before validation.
+#[derive(Deserialize)]
+struct ChoiceRepr {
+    id: ControlId,
+    label: String,
+    value: String,
+    options: Vec<ChoiceOption>,
+    enabled: bool,
+}
+
+impl TryFrom<ChoiceRepr> for Choice {
+    type Error = UiError;
+
+    fn try_from(r: ChoiceRepr) -> Result<Self, UiError> {
+        Ok(Self::new(r.id, r.label, &r.value, r.options)?.enabled(r.enabled))
     }
 }
 
@@ -313,7 +426,7 @@ pub struct ItemList {
 impl ItemList {
     /// A fixed-order list.
     #[must_use]
-    pub fn new(id: &str, rows: Vec<Row>) -> Self {
+    pub fn new(id: impl Into<ControlId>, rows: Vec<Row>) -> Self {
         Self { id: id.into(), rows, reorderable: false }
     }
 
@@ -354,6 +467,31 @@ mod tests {
             Choice::new("blend", "Blend Mode", "screen", opts).unwrap_err(),
             UiError::UnknownOption { id: "blend".into(), value: "screen".into() }
         );
+    }
+
+    #[test]
+    fn a_choice_rejects_duplicate_options() {
+        let opts = [ChoiceOption::new("a", "A"), ChoiceOption::new("a", "Again")];
+        assert_eq!(Choice::new("c", "C", "a", opts).unwrap_err(), UiError::DuplicateOption { id: "c".into(), option: "a".into() });
+    }
+
+    #[test]
+    fn deserializing_validates() {
+        let bad =
+            json!({"type": "number", "id": "a", "label": "A", "value": 0.5, "min": 1.0, "max": 0.0, "step": null, "unit": "none", "enabled": true});
+        assert!(serde_json::from_value::<Node>(bad).is_err());
+        let bad = json!({"type": "choice", "id": "c", "label": "C", "value": "z", "options": [{"id": "a", "label": "A"}], "enabled": true});
+        assert!(serde_json::from_value::<Node>(bad).is_err());
+    }
+
+    #[test]
+    fn check_finds_duplicate_controls_and_rows() {
+        let toggle = |id| Node::Toggle(Toggle::new(id, "T", true));
+        let dup = Panel::new("p", "P", PanelRole::Tool, vec![toggle("t"), Node::Section(Section::new("s", "S", vec![toggle("t")]))]);
+        assert_eq!(dup.check().unwrap_err(), UiError::DuplicateControl { panel: "p".into(), control: "t".into() });
+        let rows = Panel::new("p", "P", PanelRole::Tool, vec![Node::ItemList(ItemList::new("l", vec![Row::new(1, "a"), Row::new(1, "b")]))]);
+        assert_eq!(rows.check().unwrap_err(), UiError::DuplicateRow { list: "l".into(), row: 1 });
+        assert!(Panel::new("p", "P", PanelRole::Tool, vec![toggle("a"), toggle("b")]).check().is_ok());
     }
 
     #[test]
