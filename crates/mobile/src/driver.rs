@@ -83,12 +83,19 @@ pub(crate) struct Driver<W, S> {
     panels: Option<String>,
     /// The last menu bar, for a shell that starts listening later.
     menus: Option<String>,
-    /// The last status, for a shell that starts listening later.
+    /// The last status without its message, for a shell that starts listening later: the job in
+    /// progress, but not a toast it would show as news.
     status: Option<String>,
     /// Whether the app last said it was busy: then it runs without a window too.
     busy: bool,
     /// The device's last power state, for an app that starts after the shell reported it.
     power: Option<Power>,
+}
+
+/// A status as JSON, without its message ([`crate::ui::Status::without_message`]).
+fn replayable(json: &str) -> Option<String> {
+    let status: crate::ui::Status = serde_json::from_str(json).inspect_err(|e| log::error!("craft-mobile: status: {e}")).ok()?;
+    serde_json::to_string(&status.without_message()).ok()
 }
 
 impl<W, S> Default for Driver<W, S> {
@@ -235,7 +242,7 @@ impl<W: Window, S: Shell> Driver<W, S> {
                 Request::State(json) => self.state = Some(json.clone()),
                 Request::Panels(json) => self.panels = Some(json.clone()),
                 Request::Menus(json) => self.menus = Some(json.clone()),
-                Request::Status(json) => self.status = Some(json.clone()),
+                Request::Status(json) => self.status = replayable(json),
                 Request::Busy(busy) => self.busy = *busy,
                 _ => {}
             }
@@ -497,15 +504,20 @@ mod tests {
         assert_eq!(shell.heard(), ["state {}", r#"Panels("{\"panels\":[]}")"#]);
     }
 
+    /// A late shell sees the menus, and the job in progress; not the last message, which it would
+    /// show as news.
     #[test]
-    fn a_late_shell_still_sees_the_menus_and_the_status() {
+    fn a_late_shell_still_sees_the_menus_and_the_progress() {
         let mut driver = TestDriver::default();
         attach(&mut driver);
-        SEEN.with(|s| s.borrow_mut().requests = vec![Request::Menus(r#"{"menus":[]}"#.into()), Request::Status("{}".into())]);
+        let status = crate::ui::Status::new().info("Saved a.psd").message_id(4).progress(crate::ui::Progress::new("Exporting"));
+        let json = serde_json::to_string(&status).unwrap();
+        SEEN.with(|s| s.borrow_mut().requests = vec![Request::Menus(r#"{"menus":[]}"#.into()), Request::Status(json)]);
         driver.frame();
         let shell = FakeShell::default();
         driver.handle(Message::Shell(Some(shell.clone())));
-        assert_eq!(shell.heard(), [r#"Menus("{\"menus\":[]}")"#, r#"Status("{}")"#]);
+        let progress_only = serde_json::to_string(&crate::ui::Status::new().progress(crate::ui::Progress::new("Exporting"))).unwrap();
+        assert_eq!(shell.heard(), [r#"Menus("{\"menus\":[]}")"#.to_owned(), format!("{:?}", Request::Status(progress_only))]);
     }
 
     /// Opening a panel is a one-shot: a shell that starts listening later must not open it again.

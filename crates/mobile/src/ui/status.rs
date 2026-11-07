@@ -55,6 +55,14 @@ impl Status {
         self
     }
 
+    /// The status without its message: what a shell that starts listening later is given, so it
+    /// shows the job in progress but not old news as a new toast.
+    #[must_use]
+    pub(crate) fn without_message(mut self) -> Self {
+        self.message = None;
+        self
+    }
+
     /// The message, if any.
     #[must_use]
     pub fn message(&self) -> Option<&StatusMessage> {

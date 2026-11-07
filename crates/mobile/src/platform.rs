@@ -406,7 +406,8 @@ impl Platform {
     /// Show `status` in the shell's native status (when it declared [`crate::ui::Feature::Status`]):
     /// a message as a toast when it changes, progress while it lasts. Call it whenever the status may
     /// have changed, every frame if that's simplest: only a change is sent, and a shell that starts
-    /// listening later still gets the last one.
+    /// listening later still gets the last one's progress (not its message, which it would show as
+    /// news).
     pub fn set_status(&self, status: Status) {
         let mut shared = self.shared.borrow_mut();
         if shared.status.as_ref() == Some(&status) {
