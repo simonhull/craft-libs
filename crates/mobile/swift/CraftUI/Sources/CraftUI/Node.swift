@@ -15,6 +15,15 @@ public struct CraftPanelInfo: Decodable, Equatable, Identifiable, Sendable {
     public init(id: String, title: String, icon: String, role: Role) {
         (self.id, self.title, self.icon, self.role) = (id, title, icon, role)
     }
+
+    /// What VoiceOver calls the panel's toolbar button: its title, else its icon's name in words
+    /// (`square.3.layers.3d`: "square 3 layers 3d"), else its id. Never empty.
+    public var accessibilityName: String {
+        let title = title.trimmingCharacters(in: .whitespaces)
+        if !title.isEmpty { return title }
+        let icon = icon.split(separator: ".").joined(separator: " ")
+        return icon.isEmpty ? id : icon
+    }
 }
 
 /// One panel's contents (`ui::Panel`).

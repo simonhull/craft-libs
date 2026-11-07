@@ -179,4 +179,11 @@ enum JSONValue: Decodable, Equatable {
         #expect(try row(#","rename":"ask_first""#).rename == .allowed)
         #expect(CraftRow(id: 1, title: "a").rename == .allowed)
     }
+
+    /// A toolbar button is named for its panel; a panel without a title, for its icon.
+    @Test func aPanelsButtonAlwaysHasAName() {
+        #expect(CraftPanelInfo(id: "layers", title: "Layers", icon: "square.3.layers.3d", role: .inspector).accessibilityName == "Layers")
+        #expect(CraftPanelInfo(id: "layers", title: "  ", icon: "square.3.layers.3d", role: .inspector).accessibilityName == "square 3 layers 3d")
+        #expect(CraftPanelInfo(id: "x", title: "", icon: "", role: .tool).accessibilityName == "x", "else its id")
+    }
 }

@@ -51,4 +51,14 @@ final class RailTests: XCTestCase {
         rail(app, "Brush").doubleTap()
         XCTAssertTrue(app.staticTexts["Size"].waitForExistence(timeout: 3))
     }
+
+    /// Every button in the rail says what it is: one element per slot, named for its tool, and no
+    /// unnamed button inside it (a slot with a flyout is a menu with a primary action).
+    func testEveryRailButtonIsLabelled() throws {
+        let app = launch()
+        let x = rail(app, "Tool Options").frame.midX
+        let inRail = app.buttons.allElementsBoundByIndex.filter { abs($0.frame.midX - x) < 30 }
+        XCTAssertEqual(inRail.map(\.label), ["Move", "Brush", "Smudge", "Tool Options"])
+        XCTAssertTrue(rail(app, "Brush").isSelected)
+    }
 }

@@ -282,7 +282,6 @@ struct CraftRailSlot: View {
                 }
                 .menuStyle(.button)
                 .buttonStyle(.plain)
-                .accessibilityAction(named: "More tools") { listingTools = true }
                 .confirmationDialog("Tools", isPresented: $listingTools) {
                     ForEach(slot.tools) { other in
                         Button(other.label) { tap(other.id) }
@@ -293,9 +292,18 @@ struct CraftRailSlot: View {
                     .buttonStyle(.plain)
             }
         }
-        .accessibilityLabel(tool.label)
+        // One element per slot, a button named for its tool: a menu with a primary action is a
+        // button inside a button, and the inner one would be an unnamed element of its own.
+        .accessibilityRepresentation {
+            Button(tool.label) { tap(tool.id) }
+        }
         .accessibilityHint(Self.hint(tool, more: slot.tools.count > 1))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityActions {
+            if slot.tools.count > 1 {
+                Button("More tools") { listingTools = true }
+            }
+        }
         .help(Self.glyphs(tool).map { "\(tool.label) (\($0))" } ?? tool.label)
     }
 
