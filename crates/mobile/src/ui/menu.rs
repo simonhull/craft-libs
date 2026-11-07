@@ -170,8 +170,9 @@ impl From<MenuCommand> for MenuEntry {
 
 /// A menu item that runs one of the app's commands.
 ///
-/// Chosen from the menu it reaches the app as [`crate::CraftApp::command`]; with a shortcut, as
-/// [`crate::CraftApp::shortcut`] instead, so the app's own key handling decides, as for the key.
+/// Chosen from the menu (pointer or touch) it reaches the app as [`crate::CraftApp::command`];
+/// its keys pressed on a hardware keyboard, as [`crate::CraftApp::shortcut`], so the app's own key
+/// handling decides, as for the key.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MenuCommand {
     id: CommandId,

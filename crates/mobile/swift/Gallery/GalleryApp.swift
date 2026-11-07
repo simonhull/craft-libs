@@ -207,7 +207,7 @@ struct GalleryKeyProbe: UIViewRepresentable {
                     key: key.charactersIgnoringModifiers.uppercased(), ctrl: flags.contains(.control), cmd: flags.contains(.command),
                     alt: flags.contains(.alternate), shift: flags.contains(.shift))
                 NSLog("Gallery canvas pressesBegan \(shortcut.text)")
-                if CraftMenus.shared.claims(shortcut) {
+                if CraftMenus.shared.claim(shortcut) {
                     rest.insert(press)
                     continue
                 }

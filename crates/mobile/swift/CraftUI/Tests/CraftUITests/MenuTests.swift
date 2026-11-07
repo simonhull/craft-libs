@@ -83,9 +83,48 @@ import Testing
 
     /// An item with a shortcut sends the shortcut, so the app's key handling decides; one without
     /// sends its command.
-    @Test func anItemSendsItsShortcutElseItsCommand() {
-        #expect(CraftMenuCommand(id: "edit.undo", label: "Undo", shortcut: CraftShortcut("Cmd+Z")).message == .shortcut("Cmd+Z"))
-        #expect(CraftMenuCommand(id: "image.flip", label: "Flip").message == .command("image.flip"))
+    @MainActor static func editMenus() -> (CraftMenus, () -> [CraftChromeMessage]) {
+        let menus = CraftMenus()
+        var sent: [CraftChromeMessage] = []
+        menus.send = { sent.append($0) }
+        menus.update(CraftMenuBar(menus: [CraftMenu(title: "Edit", items: [
+            .command(CraftMenuCommand(id: "edit.copy", label: "Copy", shortcut: CraftShortcut("Cmd+C"))),
+            .command(CraftMenuCommand(id: "image.flip", label: "Flip")),
+        ])]))
+        return (menus, { sent })
+    }
+
+    /// Chosen with the pointer or a touch, an item sends its command, shortcut or not: with a text
+    /// field focused, Edit › Copy still copies from the document, not the text.
+    @Test @MainActor func aChosenItemSendsItsCommand() {
+        let (menus, sent) = Self.editMenus()
+        menus.choose("edit.copy")
+        menus.choose("image.flip")
+        menus.chooseByTouch("edit.copy")
+        #expect(sent() == [.command("edit.copy"), .command("image.flip"), .command("edit.copy")])
+    }
+
+    /// A key press the menu claimed comes back through the item as its shortcut, once, so the app's
+    /// own key handling decides as for the key itself; the next choice is a click again.
+    @Test @MainActor func aClaimedKeyPressSendsTheShortcutOnce() {
+        let (menus, sent) = Self.editMenus()
+        #expect(menus.claim(CraftShortcut(key: "C", cmd: true)))
+        menus.choose("edit.copy")
+        menus.choose("edit.copy")
+        #expect(sent() == [.shortcut("Cmd+C"), .command("edit.copy")])
+    }
+
+    /// The claim is for its own item, and a touch never sends a key press, even right after one.
+    @Test @MainActor func aClaimIsForItsItemAndNeverForATouch() {
+        let (menus, sent) = Self.editMenus()
+        #expect(menus.claim(CraftShortcut(key: "C", cmd: true)))
+        menus.chooseByTouch("edit.copy")
+        menus.choose("image.flip")
+        menus.choose("edit.copy")
+        #expect(sent() == [.command("edit.copy"), .command("image.flip"), .command("edit.copy")])
+        #expect(!menus.claim(CraftShortcut(key: "K", cmd: true)), "no item has ⌘K")
+        menus.choose("edit.copy")
+        #expect(sent().last == .command("edit.copy"))
     }
 
     /// Only a structural change rebuilds the menu bar; labels, enabled and checked are read as menus open.

@@ -39,7 +39,7 @@ enum CraftKeys {
 
     /// Forward hardware key presses. Returns the presses the app didn't take (for `super`).
     /// Command-V pastes from the system clipboard instead of reaching the app as a key. A press
-    /// that is an enabled menu item's key command goes on to it instead (``CraftMenus/claims(_:)``),
+    /// that is an enabled menu item's key command goes on to it instead (``CraftMenus/claim(_:)``),
     /// so the menu sends it to the app once, as a `shortcut`.
     @MainActor
     static func forward(_ presses: Set<UIPress>, pressed: Bool) -> Set<UIPress> {
@@ -49,7 +49,8 @@ enum CraftKeys {
                 rest.insert(press)
                 continue
             }
-            if CraftMenus.shared.claims(shortcut(name, key.modifierFlags)) {
+            let keys = shortcut(name, key.modifierFlags)
+            if pressed ? CraftMenus.shared.claim(keys) : CraftMenus.shared.claims(keys) {
                 rest.insert(press)
                 continue
             }

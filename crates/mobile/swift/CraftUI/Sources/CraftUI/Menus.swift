@@ -124,10 +124,12 @@ public struct CraftMenuCommand: Decodable, Equatable, Sendable {
             enabled: c.decode(Bool.self, forKey: .enabled), checked: c.decodeIfPresent(Bool.self, forKey: .checked))
     }
 
-    /// What choosing it sends: its shortcut when it has one, so the app's own key handling decides
-    /// (as for the key itself), else its command.
-    public var message: CraftChromeMessage {
-        shortcut.map { .shortcut($0.text) } ?? .command(id)
+    /// What choosing it sends: its shortcut when it was chosen by pressing its keys (`keyed`), so
+    /// the app's own key handling decides as for the key itself; otherwise its command, so a click
+    /// on Edit › Copy copies from the document even while a text field has the keyboard.
+    public func message(keyed: Bool) -> CraftChromeMessage {
+        guard keyed, let shortcut else { return .command(id) }
+        return .shortcut(shortcut.text)
     }
 
     /// The item without its state (label, enabled, checked on or off): what a menu is built from.
@@ -271,18 +273,45 @@ public final class CraftMenus {
         if rebuilt { rebuild() }
     }
 
-    /// Whether a key press is an enabled menu item's key command: the canvas then lets it go on to
-    /// the key command (which sends it as a `shortcut`, once) instead of taking it itself.
-    public func claims(_ press: CraftShortcut) -> Bool {
-        guard press.hasCommandModifier else { return false }
-        return commands.values.contains { command in
+    /// The item whose keys were just pressed (``claim(_:)``): its key command, which UIKit runs
+    /// next, sends the shortcut. Taken by the next choice, whatever it is.
+    @ObservationIgnored private var claimed: String?
+
+    /// The enabled menu item whose key command a key press is, if any.
+    private func item(pressed press: CraftShortcut) -> String? {
+        guard press.hasCommandModifier else { return nil }
+        return commands.first { _, command in
             command.enabled && command.shortcut.map { $0.hasCommandModifier && $0.sameKeys(as: press) } == true
-        }
+        }?.key
     }
 
-    /// The user chose `id` in a menu (or pressed its keys): send it, if the app still has it enabled.
+    /// Whether a key press (or its release) is an enabled menu item's key command: the canvas then
+    /// lets it go on to the key command instead of taking it itself.
+    public func claims(_ press: CraftShortcut) -> Bool {
+        item(pressed: press) != nil
+    }
+
+    /// A key going down: ``claims(_:)``, and when it does, the item's key command (which UIKit runs
+    /// next) sends the shortcut, once, instead of the command.
+    public func claim(_ press: CraftShortcut) -> Bool {
+        claimed = item(pressed: press)
+        return claimed != nil
+    }
+
+    /// The user chose `id` in the menu bar: by its keys right after ``claim(_:)`` took them (the
+    /// shortcut is sent, so the app's key handling decides), else with the pointer (its command).
+    /// Nothing if the app no longer has it enabled.
     public func choose(_ id: String) {
+        let keyed = claimed == id
+        claimed = nil
         guard let command = commands[id], command.enabled else { return }
-        send(command.message)
+        send(command.message(keyed: keyed))
+    }
+
+    /// The user chose `id` by touch (the toolbar's menu): always its command.
+    public func chooseByTouch(_ id: String) {
+        claimed = nil
+        guard let command = commands[id], command.enabled else { return }
+        send(command.message(keyed: false))
     }
 }

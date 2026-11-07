@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// The app's menus as one toolbar button ("ellipsis.circle"), for touch: the same tree as the menu
-/// bar, each menu a submenu. Choosing an item sends what the menu bar would (``CraftMenus/choose(_:)``).
+/// bar, each menu a submenu. Choosing an item sends its command (``CraftMenus/chooseByTouch(_:)``).
 /// Nothing while the app has no menus.
 public struct CraftMenuButton: View {
     let menus: CraftMenus
@@ -14,7 +14,7 @@ public struct CraftMenuButton: View {
         if !menus.bar.menus.isEmpty {
             Menu {
                 ForEach(Array(menus.bar.menus.enumerated()), id: \.offset) { _, menu in
-                    Menu(menu.title) { CraftMenuItems(items: menu.items, choose: menus.choose) }
+                    Menu(menu.title) { CraftMenuItems(items: menu.items, choose: menus.chooseByTouch) }
                 }
             } label: {
                 // Titled, shown as its icon, so it has a name of its own.

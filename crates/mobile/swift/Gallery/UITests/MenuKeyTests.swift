@@ -80,8 +80,8 @@ final class MenuKeyTests: XCTestCase {
         XCTAssertEqual(Set(within.map(\.label)), ["Menus"])
     }
 
-    /// The toolbar's menu holds the same tree: an item with a shortcut sends the shortcut, one
-    /// without sends its command, a submenu's item too.
+    /// The toolbar's menu holds the same tree, and a touch sends the item's command, shortcut or
+    /// not (a text field with the keyboard mustn't take Edit › Copy), a submenu's item too.
     func testTheToolbarMenuSendsWhatTheMenuBarWould() throws {
         let app = launch()
         app.buttons["Menus"].tap()
@@ -92,7 +92,7 @@ final class MenuKeyTests: XCTestCase {
         app.buttons["Transform"].tap()
         item(app, "Flip Horizontal").tap()
         sleep(1)
-        XCTAssertEqual(lines(app), [#"{"action":"command","id":"image.flip_horizontal"}"#, #"{"action":"shortcut","keys":"Cmd+R"}"#])
+        XCTAssertEqual(lines(app), [#"{"action":"command","id":"image.flip_horizontal"}"#, #"{"action":"command","id":"view.rulers"}"#])
     }
 
     /// Redo is disabled in the catalogue: its item in the toolbar's menu can't be chosen.

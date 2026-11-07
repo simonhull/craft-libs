@@ -420,7 +420,7 @@ The app's menus, in the iPad menu bar (pointer at the top edge, or hold ⌘) and
 }
 ```
 
-**Sends:** a `command` with the item's `id` when the user picks an item without a shortcut; a `shortcut` with its `keys` when the item has one, or the keys are pressed on a hardware keyboard, so the app's own key handling decides, as for the key itself. Enabled and checked are read when a menu opens, so changing them alone redraws nothing.
+**Sends:** a `command` with the item's `id` when the user picks an item with the pointer or by touch, shortcut or not (so Edit › Copy acts on the document even while a text field has the keyboard); a `shortcut` with its `keys` when the user presses them on a hardware keyboard, so the app's own key handling decides, as for the key itself. Enabled and checked are read when a menu opens, so changing them alone redraws nothing.
 
 For example:
 
