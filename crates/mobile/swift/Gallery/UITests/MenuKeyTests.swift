@@ -69,6 +69,17 @@ final class MenuKeyTests: XCTestCase {
         XCTAssertEqual(press(app, "r", .command), [#"{"action":"shortcut","keys":"Cmd+R"}"#])
     }
 
+    /// The toolbar's menu button is named, and so is every button it is made of (a menu's label is
+    /// a button of its own): none of them unnamed.
+    func testTheToolbarMenuButtonIsNamed() throws {
+        let app = launch()
+        let menus = app.buttons["Menus"].firstMatch
+        XCTAssertTrue(menus.waitForExistence(timeout: 5))
+        let within = app.buttons.allElementsBoundByIndex.filter { menus.frame.intersects($0.frame) }
+        XCTAssertFalse(within.isEmpty)
+        XCTAssertEqual(Set(within.map(\.label)), ["Menus"])
+    }
+
     /// The toolbar's menu holds the same tree: an item with a shortcut sends the shortcut, one
     /// without sends its command, a submenu's item too.
     func testTheToolbarMenuSendsWhatTheMenuBarWould() throws {

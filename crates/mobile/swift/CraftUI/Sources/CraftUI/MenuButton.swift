@@ -17,12 +17,15 @@ public struct CraftMenuButton: View {
                     Menu(menu.title) { CraftMenuItems(items: menu.items, choose: menus.choose) }
                 }
             } label: {
-                Image(systemName: "ellipsis.circle")
+                // Titled, shown as its icon, so it has a name of its own.
+                Label("Menus", systemImage: "ellipsis.circle")
+                    .labelStyle(.iconOnly)
                     .font(.title3)
                     .frame(width: 44, height: 44)
                     .contentShape(.rect)
             }
-            .menuStyle(.button)
+            // The default menu style: `.menuStyle(.button)` made the label a second, unnamed
+            // button inside the menu's.
             .buttonStyle(.plain)
             .accessibilityLabel("Menus")
         }
