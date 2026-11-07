@@ -203,6 +203,64 @@ import UIKit
         #expect(CraftMenuDelegate.placement(nil) == .beforeWindow)
     }
 
+    /// A system bar as UIKit builds it: Settings (⌘,) in the app menu, undo and redo (⌘Z, ⇧⌘Z) and
+    /// the standard edit items in Edit, Minimize (⌘M) right in Window, and Full Screen in a group.
+    static func systemBar() -> UIMenu {
+        let sel = CraftMenuResponder.action
+        func key(_ title: String, _ input: String, _ flags: UIKeyModifierFlags = .command) -> UIKeyCommand {
+            UIKeyCommand(title: title, action: sel, input: input, modifierFlags: flags)
+        }
+        let app = UIMenu(title: "App", identifier: .application, children: [
+            UICommand(title: "About", action: sel),
+            UIMenu(title: "", identifier: .preferences, options: .displayInline, children: [key("Settings…", ",")]),
+        ])
+        let edit = UIMenu(title: "Edit", identifier: .edit, children: [
+            UIMenu(title: "", identifier: .undoRedo, options: .displayInline, children: [key("Undo", "z"), key("Redo", "Z", [.command, .shift])]),
+            UIMenu(title: "", identifier: .standardEdit, options: .displayInline, children: [key("Cut", "x"), key("Copy", "c"), UICommand(title: "Delete", action: sel)]),
+            UIMenu(title: "Find", identifier: .find, children: [UIMenu(title: "", identifier: .findPanel, options: .displayInline, children: [key("Find…", "f")])]),
+        ])
+        let window = UIMenu(title: "Window", identifier: .window, children: [
+            key("Minimize", "m"),
+            UIMenu(title: "", identifier: .fullscreen, options: .displayInline, children: [key("Full Screen", "f", [.command, .control])]),
+        ])
+        return UIMenu(title: "", identifier: .root, children: [app, edit, window])
+    }
+
+    /// The app's menus with these key commands, as a bar.
+    func appMenus(_ keys: [(String, String)]) -> [UIMenu] {
+        let items = keys.map { CraftMenuEntry.command(CraftMenuCommand(id: $0.0, label: $0.0, shortcut: CraftShortcut($0.1))) }
+        return CraftMenuBuilder.menus(CraftMenuBar(menus: [CraftMenu(title: "Mine", items: items)]), action: action)
+    }
+
+    /// Before the app's menus go in, every system command whose keys they take comes out: a group
+    /// inside a system menu goes whole (half of undo and redo means nothing), a command right in a
+    /// top-level menu alone, so Window stays. A menu the app's replaces is left to that.
+    @Test func systemCommandsWhoseKeysTheAppTakesComeOut() {
+        let mine = appMenus([("prefs", "Cmd+,"), ("undo", "Cmd+Z"), ("cut", "Cmd+X"), ("min", "Cmd+M"), ("plain", "Ctrl+Tab")])
+        let taken = CraftMenuDelegate.chords(mine)
+        #expect(taken.contains(.init(input: ",", flags: .command)))
+        #expect(taken.count == 5)
+        let removal = CraftMenuDelegate.collisions(in: Self.systemBar(), with: taken, replacing: [])
+        #expect(removal.menus == [.preferences, .undoRedo, .standardEdit], "Find (⌘F) is no one's")
+        #expect(removal.commandsIn == [.window])
+        let replaced = CraftMenuDelegate.collisions(in: Self.systemBar(), with: taken, replacing: [.edit])
+        #expect(replaced.menus == [.preferences], "Edit goes whole")
+        #expect(CraftMenuDelegate.collisions(in: Self.systemBar(), with: CraftMenuDelegate.chords(appMenus([("x", "Cmd+K")])), replacing: []).isEmpty)
+    }
+
+    /// Keys match whatever case UIKit gives the input: ⇧⌘Z is "Z" or "z" with Shift.
+    @Test func keysMatchInAnyCase() {
+        let taken = CraftMenuDelegate.chords(appMenus([("redo", "Cmd+Shift+Z"), ("find", "Cmd+Ctrl+F")]))
+        let removal = CraftMenuDelegate.collisions(in: Self.systemBar(), with: taken, replacing: [])
+        #expect(removal.menus == [.undoRedo, .fullscreen])
+        #expect(removal.commandsIn.isEmpty)
+    }
+
+    /// Only an app command that is a key command takes keys: one only shown (a bare letter) doesn't.
+    @Test func shownShortcutsTakeNoKeys() {
+        #expect(CraftMenuDelegate.chords(appMenus([("tool", "B"), ("flip", "F5")])).isEmpty)
+    }
+
     @Test func leadingTrailingAndRepeatedSeparatorsAreDropped() {
         let items: [CraftMenuEntry] = [.separator, .command(CraftMenuCommand(id: "a", label: "A")), .separator, .separator]
         let built = CraftMenuBuilder.elements(items, action: action)

@@ -140,8 +140,23 @@ open class CraftMenuDelegate: UIResponder, UIApplicationDelegate {
     /// File, Edit, View or Help menu takes the system menu's place; a Window menu's items go before
     /// the system's window items; a menu of the app's own goes before Window. The system's Format
     /// menu is for text views, which the app doesn't have.
+    ///
+    /// First, the system's commands whose keys the app's menus take come out (``collisions(in:with:replacing:)``):
+    /// two key commands with the same keys are undefined behaviour, and UIKit logs each pair.
     static func install(_ menus: [UIMenu], roles: [CraftMenu.Role?], in builder: any UIMenuBuilder) {
         builder.remove(menu: .format)
+        let replacing = Set(roles.compactMap { role -> UIMenu.Identifier? in
+            guard case let .replace(system) = placement(role), builder.menu(for: system) != nil else { return nil }
+            return system
+        })
+        if let root = builder.menu(for: .root) {
+            let taken = chords(menus)
+            let removal = collisions(in: root, with: taken, replacing: replacing)
+            removal.menus.forEach(builder.remove(menu:))
+            for id in removal.commandsIn {
+                builder.replaceChildren(ofMenu: id) { children in children.filter { chord($0).map { !taken.contains($0) } ?? true } }
+            }
+        }
         for (menu, role) in zip(menus, roles) {
             switch Self.placement(role) {
             case let .replace(system) where builder.menu(for: system) != nil:
@@ -163,6 +178,76 @@ open class CraftMenuDelegate: UIResponder, UIApplicationDelegate {
         case replace(UIMenu.Identifier)
         case startOfWindow
         case beforeWindow
+    }
+
+    /// A key command's keys: its input in lower case (UIKit may give ⇧⌘Z as "Z" or "z") and its
+    /// modifiers.
+    struct Chord: Hashable {
+        let input: String
+        let flags: Int
+
+        init(input: String, flags: UIKeyModifierFlags) {
+            (self.input, self.flags) = (input.lowercased(), flags.rawValue)
+        }
+    }
+
+    /// The keys of `element` when it is a key command.
+    static func chord(_ element: UIMenuElement) -> Chord? {
+        guard let command = element as? UIKeyCommand, let input = command.input else { return nil }
+        return Chord(input: input, flags: command.modifierFlags)
+    }
+
+    /// Every key command's keys in `elements`, submenus included.
+    static func chords(_ elements: [UIMenuElement]) -> Set<Chord> {
+        elements.reduce(into: Set<Chord>()) { taken, element in
+            if let menu = element as? UIMenu {
+                taken.formUnion(chords(menu.children))
+            } else if let chord = chord(element) {
+                taken.insert(chord)
+            }
+        }
+    }
+
+    /// What comes out of the system's menus before the app's go in.
+    struct Removal: Equatable {
+        /// System groups and submenus to remove whole.
+        var menus: [UIMenu.Identifier] = []
+        /// Top-level system menus to remove the colliding commands from, keeping the rest.
+        var commandsIn: [UIMenu.Identifier] = []
+
+        var isEmpty: Bool { menus.isEmpty && commandsIn.isEmpty }
+    }
+
+    /// The system commands under `root` (the bar) whose keys are `taken` by the app's menus. Pure.
+    ///
+    /// - A group or submenu inside a system menu with such a command goes whole: Undo without Redo,
+    ///   or Delete without Cut, Copy and Paste, means nothing (undo and redo, standard edit, find,
+    ///   Settings…).
+    /// - Such a command right in a top-level menu goes alone, so the menu (Window) stays.
+    /// - Menus in `replacing` are left alone: the app's menus take their place, whole.
+    static func collisions(in root: UIMenu, with taken: Set<Chord>, replacing: Set<UIMenu.Identifier>) -> Removal {
+        var removal = Removal()
+        func collides(_ element: UIMenuElement) -> Bool {
+            chord(element).map(taken.contains) ?? false
+        }
+        func anyCollides(_ elements: [UIMenuElement]) -> Bool {
+            elements.contains { element in (element as? UIMenu).map { anyCollides($0.children) } ?? collides(element) }
+        }
+        func visit(_ groups: [UIMenu]) {
+            for group in groups {
+                if anyCollides(group.children) {
+                    removal.menus.append(group.identifier)
+                } else {
+                    visit(group.children.compactMap { $0 as? UIMenu })
+                }
+            }
+        }
+        guard !taken.isEmpty else { return removal }
+        for top in root.children.compactMap({ $0 as? UIMenu }) where !replacing.contains(top.identifier) {
+            if top.children.contains(where: collides) { removal.commandsIn.append(top.identifier) }
+            visit(top.children.compactMap { $0 as? UIMenu })
+        }
+        return removal
     }
 
     static func placement(_ role: CraftMenu.Role?) -> Placement {
