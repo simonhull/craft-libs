@@ -88,8 +88,12 @@ public final class CraftBridge {
     public static let shared = CraftBridge()
 
     public private(set) var snapshot = CraftSnapshot()
-    /// The app's native panels: every one it offers, and the open ones described (wire kind 13).
-    public private(set) var panels = CraftPanels()
+    /// Every native panel the app offers (wire kind 13's `panels`): the toolbar's buttons. Observed
+    /// apart from ``open``, so a new description doesn't redraw the toolbar.
+    public private(set) var panels: [CraftPanelInfo] = []
+    /// The open panels, described, by id (wire kind 13's `open`): changes as often as once a frame
+    /// mid-drag.
+    public private(set) var open: [String: CraftPanel] = [:]
     /// Whether the app has described its panels since the shell last said which are on screen:
     /// until then a shown panel without a description is still coming; after, it isn't.
     private(set) var describedSinceShowing = false
@@ -432,7 +436,9 @@ public final class CraftBridge {
         case 13:
             do {
                 let decoded = try JSONDecoder().decode(CraftPanels.self, from: Data(text.utf8))
-                if decoded != panels { panels = decoded }
+                // Each assigned only when it changed, so its observers alone redraw.
+                if decoded.panels != panels { panels = decoded.panels }
+                if decoded.open != open { open = decoded.open }
                 if !describedSinceShowing { describedSinceShowing = true }
             } catch {
                 craftLog.error("native panels didn't decode, kept the last ones: \(error, privacy: .public)")

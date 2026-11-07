@@ -1,7 +1,9 @@
 import SwiftUI
 
-// The app's native panels in the shell. Only the views here read `bridge.panels`, so a new
-// description (wire kind 13, at most once a frame) redraws them and not the whole shell.
+// The app's native panels in the shell. Only the views here read `bridge.panels` and `bridge.open`,
+// so a new description (wire kind 13, at most once a frame) redraws them and not the whole shell.
+// The toolbar reads only `bridge.panels`, which changes when the panels offered do, so a drag
+// redraws the open panel and not the toolbar or its popovers.
 
 /// What the shell's inspector column holds.
 enum CraftInspector: Hashable {
@@ -26,7 +28,7 @@ struct CraftPanelTools: View {
     let toggleInspector: (CraftInspector) -> Void
 
     var body: some View {
-        ForEach(bridge.panels.panels) { info in
+        ForEach(bridge.panels) { info in
             switch info.role {
             case .inspector:
                 button(info, open: openInspector == .panel(info.id)) { toggleInspector(.panel(info.id)) }
@@ -54,10 +56,10 @@ struct CraftPanelHost: View {
     let id: String
 
     var body: some View {
-        if let panel = bridge.panels.open[id] {
+        if let panel = bridge.open[id] {
             CraftPanelView(panel: panel, send: bridge.send)
         } else {
-            let title = bridge.panels.panels.first { $0.id == id }?.title ?? ""
+            let title = bridge.panels.first { $0.id == id }?.title ?? ""
             Group {
                 if bridge.describedSinceShowing {
                     ContentUnavailableView("Not Available", systemImage: "rectangle.dashed", description: Text("\(title) has nothing to show right now."))
@@ -83,7 +85,7 @@ struct CraftPanelCloser: View {
         Color.clear
             .frame(width: 0, height: 0)
             .accessibilityHidden(true)
-            .onChange(of: bridge.panels.panels) { _, offered in
+            .onChange(of: bridge.panels) { _, offered in
                 let ids = Set(offered.map(\.id))
                 if let id = inspector.panelID, !ids.contains(id) { inspectorShown = false }
                 if let open = popover, !ids.contains(open) { popover = nil }
@@ -108,7 +110,7 @@ struct CraftPanelOpener: View {
             .onChange(of: bridge.openRequest, initial: true) { _, request in
                 guard let request else { return }
                 bridge.openRequestHandled()
-                guard let info = bridge.panels.panels.first(where: { $0.id == request.id }) else {
+                guard let info = bridge.panels.first(where: { $0.id == request.id }) else {
                     craftLog.debug("the app asked to open panel \(request.id, privacy: .public), which it doesn't offer")
                     return
                 }
