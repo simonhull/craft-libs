@@ -83,7 +83,7 @@ mod tests {
     }
 
     fn describe(on: bool) -> impl Fn(&PanelId) -> Option<Panel> {
-        move |id| (id.0 == "a").then(|| Panel::new("a", "A", PanelRole::Inspector, vec![Node::Toggle(Toggle::new("t", "T", on))]))
+        move |id| (id.as_str() == "a").then(|| Panel::new("a", "A", PanelRole::Inspector, vec![Node::Toggle(Toggle::new("t", "T", on))]))
     }
 
     #[test]

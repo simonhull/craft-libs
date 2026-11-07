@@ -109,7 +109,7 @@ pub trait CraftApp: eframe::App + 'static {
     ///
     /// # Errors
     /// Why the edit could not apply.
-    fn apply(&mut self, ctx: &egui::Context, edit: &ui::Edit) -> Result<(), String> {
+    fn apply(&mut self, ctx: &egui::Context, edit: &ui::Edit) -> Result<(), ui::EditError> {
         let _ = (ctx, edit);
         Err("this app has no native panels".into())
     }

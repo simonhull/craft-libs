@@ -5,14 +5,52 @@
 //! native control and placement for the platform. Changes come back as [`Edit`]s.
 //! The JSON every node becomes is listed in `catalogue/ui.md`.
 
+/// A `u64` id newtype: plain on the wire, typed in Rust.
+macro_rules! number_id {
+    ($(#[$doc:meta])* $name:ident) => {
+        $(#[$doc])*
+        #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+        #[serde(transparent)]
+        pub struct $name(u64);
+
+        impl $name {
+            /// The id as a number.
+            #[must_use]
+            pub const fn get(self) -> u64 {
+                self.0
+            }
+        }
+
+        impl From<u64> for $name {
+            fn from(n: u64) -> Self {
+                Self(n)
+            }
+        }
+
+        impl From<$name> for u64 {
+            fn from(id: $name) -> Self {
+                id.0
+            }
+        }
+
+        impl std::fmt::Display for $name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                self.0.fmt(f)
+            }
+        }
+    };
+}
+
 mod catalogue;
 mod edit;
 mod node;
 mod publish;
 
 pub use catalogue::{catalogue_json, catalogue_markdown};
-pub use edit::{Edit, EditValue, Message, Phase, Position};
-pub use node::{Choice, ChoiceOption, ControlId, ItemList, Node, Number, Panel, PanelId, PanelInfo, PanelRole, Row, Scale, Section, Toggle, Unit};
+pub use edit::{Edit, EditError, EditValue, GestureId, Message, Phase, Position};
+pub use node::{
+    Choice, ChoiceOption, ControlId, ItemList, Node, Number, Panel, PanelId, PanelInfo, PanelRole, Row, RowId, Scale, Section, Toggle, Unit,
+};
 pub(crate) use publish::PanelsState;
 use publish::Published;
 
@@ -23,19 +61,19 @@ pub enum UiError {
     #[error("`{id}`: the range is empty or not finite")]
     EmptyRange {
         /// The control.
-        id: String,
+        id: ControlId,
     },
     /// A number on a logarithmic scale has a range reaching zero or below.
     #[error("`{id}`: a logarithmic scale needs a minimum above zero")]
     LogScaleNeedsPositiveMin {
         /// The control.
-        id: String,
+        id: ControlId,
     },
     /// A choice's value isn't one of its options.
     #[error("`{id}`: `{value}` isn't one of the options")]
     UnknownOption {
         /// The control.
-        id: String,
+        id: ControlId,
         /// The value given.
         value: String,
     },
@@ -43,7 +81,7 @@ pub enum UiError {
     #[error("`{id}`: option `{option}` appears twice")]
     DuplicateOption {
         /// The control.
-        id: String,
+        id: ControlId,
         /// The repeated option id.
         option: String,
     },
@@ -51,16 +89,16 @@ pub enum UiError {
     #[error("panel `{panel}`: control `{control}` appears twice")]
     DuplicateControl {
         /// The panel.
-        panel: String,
+        panel: PanelId,
         /// The repeated control id.
-        control: String,
+        control: ControlId,
     },
     /// Two rows of a list share an id.
     #[error("list `{list}`: row {row} appears twice")]
     DuplicateRow {
         /// The list control.
-        list: String,
+        list: ControlId,
         /// The repeated row id.
-        row: u64,
+        row: RowId,
     },
 }

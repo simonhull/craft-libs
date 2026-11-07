@@ -692,7 +692,7 @@ mod tests {
         fn snapshot(&self) -> Snapshot {
             Snapshot::default()
         }
-        fn apply(&mut self, _ctx: &egui::Context, edit: &ui::Edit) -> Result<(), String> {
+        fn apply(&mut self, _ctx: &egui::Context, edit: &ui::Edit) -> Result<(), ui::EditError> {
             self.0.push(format!("apply {}", edit.control));
             if edit.control.as_str() == "bad" { Err("no".into()) } else { Ok(()) }
         }
@@ -703,7 +703,7 @@ mod tests {
             panel: "p".into(),
             control: control.into(),
             phase: ui::Phase::Commit,
-            gesture: 1,
+            gesture: 1.into(),
             value: ui::EditValue::Toggle(true),
         }))
     }

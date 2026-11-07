@@ -10,13 +10,13 @@ use super::UiError;
 /// A panel's id, stable for the app's life ("layers", "brush").
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct PanelId(pub String);
+pub struct PanelId(String);
 
 /// A control's id, unique within its panel and stable across descriptions, so the shell keeps
 /// focus and gestures on it.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct ControlId(pub String);
+pub struct ControlId(String);
 
 macro_rules! id_newtype {
     ($name:ident) => {
@@ -118,14 +118,14 @@ impl Panel {
                     Node::ItemList(l) => &l.id,
                 };
                 if !seen.insert(id) {
-                    return Err(UiError::DuplicateControl { panel: panel.0.clone(), control: id.0.clone() });
+                    return Err(UiError::DuplicateControl { panel: panel.clone(), control: id.clone() });
                 }
                 match node {
                     Node::Section(s) => walk(panel, &s.children, seen)?,
                     Node::ItemList(l) => {
                         let mut rows = HashSet::new();
                         if let Some(dup) = l.rows.iter().find(|r| !rows.insert(r.id)) {
-                            return Err(UiError::DuplicateRow { list: id.0.clone(), row: dup.id });
+                            return Err(UiError::DuplicateRow { list: id.clone(), row: dup.id });
                         }
                     }
                     Node::Number(_) | Node::Toggle(_) | Node::Choice(_) => {}
@@ -237,7 +237,7 @@ impl Number {
         let id = id.into();
         let (min, max) = range.into_inner();
         if !(min.is_finite() && max.is_finite() && min <= max) {
-            return Err(UiError::EmptyRange { id: id.0 });
+            return Err(UiError::EmptyRange { id });
         }
         let value = if value.is_finite() { value.clamp(min, max) } else { min };
         Ok(Self { id, label: label.into(), value, min, max, step: None, scale: Scale::Linear, unit: Unit::None, enabled: true })
@@ -250,7 +250,7 @@ impl Number {
     /// [`UiError::LogScaleNeedsPositiveMin`] for [`Scale::Log`] when `min <= 0`.
     pub fn scale(mut self, scale: Scale) -> Result<Self, UiError> {
         if scale == Scale::Log && self.min <= 0.0 {
-            return Err(UiError::LogScaleNeedsPositiveMin { id: self.id.0 });
+            return Err(UiError::LogScaleNeedsPositiveMin { id: self.id });
         }
         self.scale = scale;
         Ok(self)
@@ -371,10 +371,10 @@ impl Choice {
         let options = options.into();
         let mut seen = HashSet::new();
         if let Some(dup) = options.iter().find(|o| !seen.insert(o.id.as_str())) {
-            return Err(UiError::DuplicateOption { id: id.0, option: dup.id.clone() });
+            return Err(UiError::DuplicateOption { id, option: dup.id.clone() });
         }
         if !options.iter().any(|o| o.id == value) {
-            return Err(UiError::UnknownOption { id: id.0, value: value.to_owned() });
+            return Err(UiError::UnknownOption { id, value: value.to_owned() });
         }
         Ok(Self { id, label: label.into(), value: value.to_owned(), options, enabled: true })
     }
@@ -405,10 +405,15 @@ impl TryFrom<ChoiceRepr> for Choice {
     }
 }
 
+number_id! {
+    /// A row's id: the app's own (a layer id), unique within its list.
+    RowId
+}
+
 /// One row of an [`ItemList`].
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Row {
-    id: u64,
+    id: RowId,
     title: String,
     subtitle: String,
     depth: u32,
@@ -419,8 +424,8 @@ pub struct Row {
 impl Row {
     /// A top-level, unselected row that can't be hidden. `id` is the app's own (a layer id).
     #[must_use]
-    pub fn new(id: u64, title: impl Into<String>) -> Self {
-        Self { id, title: title.into(), subtitle: String::new(), depth: 0, visible: None, selected: false }
+    pub fn new(id: impl Into<RowId>, title: impl Into<String>) -> Self {
+        Self { id: id.into(), title: title.into(), subtitle: String::new(), depth: 0, visible: None, selected: false }
     }
 
     /// A second line ("Pixel", "Group").
@@ -565,8 +570,19 @@ mod tests {
         let dup = Panel::new("p", "P", PanelRole::Tool, vec![toggle("t"), Node::Section(Section::new("s", "S", vec![toggle("t")]))]);
         assert_eq!(dup.check().unwrap_err(), UiError::DuplicateControl { panel: "p".into(), control: "t".into() });
         let rows = Panel::new("p", "P", PanelRole::Tool, vec![Node::ItemList(ItemList::new("l", vec![Row::new(1, "a"), Row::new(1, "b")]))]);
-        assert_eq!(rows.check().unwrap_err(), UiError::DuplicateRow { list: "l".into(), row: 1 });
+        assert_eq!(rows.check().unwrap_err(), UiError::DuplicateRow { list: "l".into(), row: 1.into() });
         assert!(Panel::new("p", "P", PanelRole::Tool, vec![toggle("a"), toggle("b")]).check().is_ok());
+    }
+
+    #[test]
+    fn row_ids_are_plain_numbers_and_errors_name_typed_ids() {
+        assert_eq!(serde_json::to_value(Row::new(7, "a")).unwrap()["id"], json!(7));
+        assert_eq!(RowId::from(7).get(), 7);
+        assert_eq!(RowId::from(7).to_string(), "7");
+        let rows = Panel::new("p", "P", PanelRole::Tool, vec![Node::ItemList(ItemList::new("l", vec![Row::new(1, "a"), Row::new(1, "b")]))]);
+        assert_eq!(rows.check().unwrap_err(), UiError::DuplicateRow { list: ControlId::from("l"), row: RowId::from(1) });
+        let dup = Panel::new("p", "P", PanelRole::Tool, vec![Node::Toggle(Toggle::new("t", "T", true)), Node::Toggle(Toggle::new("t", "T", true))]);
+        assert_eq!(dup.check().unwrap_err(), UiError::DuplicateControl { panel: PanelId::from("p"), control: ControlId::from("t") });
     }
 
     #[test]

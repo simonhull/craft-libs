@@ -39,7 +39,7 @@ fn edit(control: &str, phase: Phase, gesture: u64, value: EditValue) -> Message 
 
 /// An edit to a control of `panel`.
 fn edit_in(panel: &str, control: &str, phase: Phase, gesture: u64, value: EditValue) -> Message {
-    Message::Edit(Edit { panel: panel.into(), control: control.into(), phase, gesture, value })
+    Message::Edit(Edit { panel: panel.into(), control: control.into(), phase, gesture: gesture.into(), value })
 }
 
 fn examples() -> Vec<Primitive> {
@@ -90,7 +90,7 @@ fn examples() -> Vec<Primitive> {
             ItemList::new("layers", vec![Row::new(2, "Sky").subtitle("Pixel").visible(Some(true)).selected(true), Row::new(1, "Background").subtitle("Pixel").visible(Some(true))])
                 .reorderable(true),
         ),
-        edit: Some(edit("layers", Phase::Commit, 10, EditValue::Move { row: 1, target: 2, position: Position::Above })),
+        edit: Some(edit("layers", Phase::Commit, 10, EditValue::Move { row: 1.into(), target: 2.into(), position: Position::Above })),
     });
     out
 }
