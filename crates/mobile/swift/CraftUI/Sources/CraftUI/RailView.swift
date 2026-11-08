@@ -305,6 +305,7 @@ struct CraftRailSlot: View {
                     tap(tool.id)
                 }
                 .menuStyle(.button)
+                .menuOrder(.fixed)
                 .buttonStyle(.plain)
                 .confirmationDialog("Tools", isPresented: $listingTools) {
                     ForEach(slot.tools) { other in

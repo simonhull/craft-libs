@@ -27,6 +27,9 @@ public struct CraftMenuButton: View {
             // The default menu style: `.menuStyle(.button)` made the label a second, unnamed
             // button inside the menu's.
             .buttonStyle(.plain)
+            // Opened upward from the bottom toolbar, the default order puts the first item nearest
+            // the finger: File's menu read bottom to top. The app's order, top to bottom, always.
+            .menuOrder(.fixed)
             .accessibilityLabel("Menus")
         }
     }
