@@ -95,6 +95,35 @@ pub enum EditValue {
         /// The action's id.
         action: ActionId,
     },
+    /// A [`super::Transport`]'s scrubber moved the playhead: `begin`, `change` while scrubbing,
+    /// `commit` at release (or `cancel`). Frames count from 0 and may be past the transport's last
+    /// frame if it changed meanwhile: clamp it.
+    Seek {
+        /// The frame.
+        frame: u64,
+    },
+    /// One of a [`super::Transport`]'s buttons; always a [`Phase::Commit`].
+    Transport(TransportAction),
+}
+
+/// What a [`super::Transport`] button asks for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TransportAction {
+    /// Start playing.
+    Play,
+    /// Pause where it is.
+    Pause,
+    /// Stop: what that means beyond pausing (going back to the start, say) is the app's rule.
+    Stop,
+    /// One frame back.
+    StepBack,
+    /// One frame on.
+    StepForward,
+    /// To the first frame.
+    ToStart,
+    /// To the last frame.
+    ToEnd,
 }
 
 number_id! {
@@ -234,6 +263,43 @@ mod tests {
         assert_eq!(edit.value, EditValue::ListAction { action: "new_layer".into() });
         assert_eq!(serde_json::to_value(&edit.value).unwrap(), json!({"kind": "list_action", "value": {"action": "new_layer"}}));
         assert_eq!(serde_json::from_value::<EditValue>(serde_json::to_value(&edit.value).unwrap()).unwrap(), edit.value);
+    }
+
+    /// A scrub seeks by frame, in phases: exactly what the shell sends.
+    #[test]
+    fn a_seek_parses() {
+        let m: Message = serde_json::from_str(
+            r#"{"action":"edit","panel":"timeline","control":"transport","phase":"change","gesture":6,"value":{"kind":"seek","value":{"frame":12}}}"#,
+        )
+        .unwrap();
+        let Message::Edit(edit) = m else { panic!("not an edit: {m:?}") };
+        assert_eq!(edit.phase, Phase::Change);
+        assert_eq!(edit.value, EditValue::Seek { frame: 12 });
+        assert_eq!(serde_json::to_value(&edit.value).unwrap(), json!({"kind": "seek", "value": {"frame": 12}}));
+        assert!(serde_json::from_value::<EditValue>(json!({"kind": "seek", "value": {"frame": -1}})).is_err());
+    }
+
+    /// Each transport button sends its action by name.
+    #[test]
+    fn transport_actions_parse() {
+        let actions = [
+            ("play", TransportAction::Play),
+            ("pause", TransportAction::Pause),
+            ("stop", TransportAction::Stop),
+            ("step_back", TransportAction::StepBack),
+            ("step_forward", TransportAction::StepForward),
+            ("to_start", TransportAction::ToStart),
+            ("to_end", TransportAction::ToEnd),
+        ];
+        for (name, action) in actions {
+            let json = json!({"kind": "transport", "value": name});
+            assert_eq!(serde_json::from_value::<EditValue>(json.clone()).unwrap(), EditValue::Transport(action));
+            assert_eq!(serde_json::to_value(EditValue::Transport(action)).unwrap(), json);
+        }
+        assert!(serde_json::from_value::<EditValue>(json!({"kind": "transport", "value": "rewind"})).is_err());
+        let m: Message = serde_json::from_str(r#"{"action":"edit","panel":"timeline","control":"transport","phase":"commit","gesture":7,"value":{"kind":"transport","value":"step_forward"}}"#).unwrap();
+        let Message::Edit(edit) = m else { panic!("not an edit: {m:?}") };
+        assert_eq!(edit.value, EditValue::Transport(TransportAction::StepForward));
     }
 
     #[test]

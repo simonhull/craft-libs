@@ -87,20 +87,22 @@ mod publish;
 mod rail;
 mod shell;
 mod status;
+mod transport;
 
 pub use catalogue::{catalogue_json, catalogue_markdown};
 pub use command::{CommandId, Shortcut, named_keys};
-pub use edit::{Edit, EditError, EditValue, GestureId, Message, Phase, Position, SelectMode};
+pub use edit::{Edit, EditError, EditValue, GestureId, Message, Phase, Position, SelectMode, TransportAction};
 pub use menu::{Menu, MenuBar, MenuCommand, MenuEntry, MenuRole, Submenu};
 pub use node::{
     ActionId, Choice, ChoiceOption, ControlId, ItemAction, ItemList, Node, Number, Panel, PanelId, PanelInfo, PanelRole, Rename, Row, RowId, Scale,
     Section, Toggle, Unit,
 };
 pub(crate) use publish::PanelsState;
-use publish::Published;
+use publish::{LiveValue, Published};
 pub use rail::{Icon, Tool, ToolId, ToolPalette, ToolSlot};
 pub use shell::{Feature, ShellFeatures, UnknownFeature};
 pub use status::{Progress, Status, StatusMessage, Tone};
+pub use transport::{FrameRange, Playback, Rate, TimeFormat, Transport};
 
 /// A node that can't be built as asked.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
@@ -198,6 +200,43 @@ pub enum UiError {
         palette: ControlId,
         /// The repeated tool.
         tool: ToolId,
+    },
+    /// A rate that isn't a finite number of frames per second above zero.
+    #[error("a rate must be a finite number of frames per second above zero")]
+    BadRate,
+    /// A frame range whose end isn't after its start.
+    #[error("the frames {start}..{end} are none: the end must be after the start")]
+    EmptyFrameRange {
+        /// The first frame given.
+        start: u64,
+        /// The end given.
+        end: u64,
+    },
+    /// A transport without frames.
+    #[error("`{id}`: a transport needs at least one frame")]
+    NoFrames {
+        /// The control.
+        id: ControlId,
+    },
+    /// A transport's position past its last frame.
+    #[error("`{id}`: frame {frame} is past the last of {duration} frames (counted from 0)")]
+    FrameOutOfRange {
+        /// The control.
+        id: ControlId,
+        /// The frame given.
+        frame: u64,
+        /// How many frames there are.
+        duration: u64,
+    },
+    /// A transport's work area ending past its last frame.
+    #[error("`{id}`: the range ends at {end}, past the {duration} frames")]
+    RangeOutOfBounds {
+        /// The control.
+        id: ControlId,
+        /// The range's end.
+        end: u64,
+        /// How many frames there are.
+        duration: u64,
     },
     /// A palette's selected tool isn't one of its tools.
     #[error("palette `{palette}`: the selected tool `{tool}` isn't one of its tools")]

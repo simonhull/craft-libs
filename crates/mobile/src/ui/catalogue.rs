@@ -6,8 +6,9 @@ use std::fmt::Write as _;
 use serde::Serialize;
 
 use super::{
-    Choice, ChoiceOption, Edit, EditValue, Icon, ItemAction, ItemList, Menu, MenuBar, MenuEntry, Message, Node, Number, Panel, PanelInfo, PanelRole,
-    Phase, Position, Progress, Published, Row, Scale, Section, Status, Toggle, Tool, ToolPalette, ToolSlot, Unit,
+    Choice, ChoiceOption, Edit, EditValue, FrameRange, Icon, ItemAction, ItemList, LiveValue, Menu, MenuBar, MenuEntry, Message, Node, Number, Panel,
+    PanelInfo, PanelRole, Phase, Position, Progress, Published, Rate, Row, Scale, Section, Status, TimeFormat, Toggle, Tool, ToolPalette, ToolSlot,
+    Transport, Unit,
 };
 
 /// The catalogue's format version; bump it when a node's JSON changes.
@@ -142,7 +143,23 @@ fn examples() -> Vec<Primitive> {
             edit: Some(edit_in("tools", "palette", Phase::Commit, 11, EditValue::Choice("pencil".into()))),
         });
     }
+    if let Ok(transport) = example_transport() {
+        out.push(Primitive {
+            name: "transport",
+            about: "A transport bar, in a panel with the `transport` role: a floating Liquid Glass bar above the bottom toolbar while the app offers it, hidden while the keyboard is up. Buttons go to the start, step back, play or pause, step forward and go to the end; a scrubber drags the playhead, with the work area shaded; a label shows the time. While it plays, its position moves without the panel being described again (request kind 17, below).",
+            fields: "`position` is the playhead's frame, counted from 0, below `duration` (at least 1 frame). `rate` is frames per second, above 0 and not necessarily whole (`29.97`). `format` says how the label shows a time, and only that: `frames` (the frame counted from 1, of the duration: `12 / 30`; also when left out) or `timecode` (`HH:MM:SS:FF` at `rate`). `playing` shows Pause in place of Play. `range` is the work area (the loop region) as `[start, end]`, `start` inclusive and `end` exclusive, not empty and ending at `duration` at most; `null` or left out for none. `enabled: false` greys it out.",
+            sends: "`seek` edits from the scrubber, with the `frame`: `begin`, `change` while scrubbing, then `commit` at release (or `cancel`). `transport` edits from the buttons, each one `commit`, naming the action: `play`, `pause`, `stop`, `step_back`, `step_forward`, `to_start` or `to_end`, as `{\"kind\":\"transport\",\"value\":\"step_forward\"}`. What Stop does beyond pausing, and whether stepping pauses, are the app's rules.",
+            example: Node::Transport(transport),
+            edit: Some(edit_in("timeline", "transport", Phase::Change, 12, EditValue::Seek { frame: 12 })),
+        });
+    }
     out
+}
+
+/// A transport for the catalogue: paused on frame 12 (counted from 1) of 30 at 24 fps, with a
+/// work area of the first 24 frames.
+fn example_transport() -> Result<Transport, super::UiError> {
+    Ok(Transport::new("transport", 11, 30, Rate::new(24.0)?)?.range(Some(FrameRange::new(0, 24)?))?.format(TimeFormat::Frames))
 }
 
 /// A layer row for the catalogue, with a plain and a destructive action.
@@ -306,7 +323,9 @@ fn wire_markdown() -> String {
          `id`, a `title`, an `icon` (an SF Symbol name; Android maps it to a Material icon) and a \
          `role`: `inspector` slides in beside the canvas, `tool` is a popover from its toolbar \
          button, `rail` is a vertical rail at the canvas's leading edge, always on screen (its \
-         `tool_palette`).\n\n",
+         `tool_palette`), and `transport` is a floating bar above the bottom toolbar, on screen \
+         while the app offers it (its `transport`). The shell counts a rail or transport it shows \
+         among the panels on screen.\n\n",
     );
     let _ = write!(s, "```json\n{}\n```\n", serde_json::to_string_pretty(&published).unwrap_or_default());
     s.push_str(
@@ -315,6 +334,17 @@ fn wire_markdown() -> String {
          natively, such as a menu item. The shell opens it in its role's place, as its toolbar \
          button would, and then says which panels are on screen (`open_panels`, below) as usual; an id the app doesn't offer opens \
          nothing. Unlike the panels, it isn't sent again to a shell that starts listening later.\n",
+    );
+    let live = [LiveValue { panel: "timeline".into(), control: "transport".into(), position: 12 }];
+    let _ = write!(
+        s,
+        "\nWhile a transport plays, only its position changes from frame to frame. Then the app sends \
+         the positions alone (request kind 17), not the panels: a list with an entry for each \
+         transport whose `position` changed since the shell last heard it, by panel and control \
+         `id`. The shell shows it in place of the described `position` until the next description, \
+         which carries the current positions itself. Anything else that changes sends the panels \
+         as usual. Unlike the panels, it isn't sent again to a shell that starts listening later.\n\n```json\n{}\n```\n",
+        serde_json::to_string(&live).unwrap_or_default()
     );
     let _ = write!(
         s,
@@ -387,7 +417,7 @@ mod tests {
     #[test]
     fn every_primitive_has_an_example() {
         let names: Vec<_> = examples().iter().map(|e| e.name).collect();
-        for t in ["section", "number", "toggle", "choice", "item_list", "tool_palette"] {
+        for t in ["section", "number", "toggle", "choice", "item_list", "tool_palette", "transport"] {
             assert!(names.contains(&t), "{t}");
         }
     }

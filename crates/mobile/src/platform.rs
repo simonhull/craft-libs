@@ -201,6 +201,10 @@ pub(crate) enum Request {
     /// The app's status ([`Status`] as JSON), sent when it changes (and again to a shell that starts
     /// listening later).
     Status(String),
+    /// The open transports' positions that changed while nothing else in their panels did (a
+    /// transport playing), as JSON: `[{"panel": id, "control": id, "position": frame}…]`. Never
+    /// replayed: the next description (kind 13) carries the positions too.
+    Live(String),
 }
 
 impl Request {
@@ -225,6 +229,7 @@ impl Request {
     /// | 14   | open a panel  | the panel's id                 | —        |
     /// | 15   | menus         | the menu bar as JSON (`ui`)    | —        |
     /// | 16   | status        | the status as JSON (`ui`)      | —        |
+    /// | 17   | live values   | changed positions as JSON      | —        |
     ///
     /// Kind 10 is answered with the clipboard's contents (`craft_paste_*`, `CraftNative.paste*`),
     /// text first while a text field is focused, else an image first; an image the app copied
@@ -234,6 +239,19 @@ impl Request {
     /// For kind 14 the shell opens the panel in its role's place (an inspector beside the canvas,
     /// a tool's popover), if the app offers it and the shell shows native panels; it ignores any
     /// other id. Unlike kinds 3 and 13, it isn't sent again to a shell that starts listening later.
+    ///
+    /// Kind 17 moves transports' playheads without describing their panels again, as often as once a
+    /// frame while one plays: a JSON array with an entry for each [`crate::ui::Transport`] whose
+    /// position changed since the shell last heard it, and only those, in panel then tree order:
+    ///
+    /// ```json
+    /// [{"panel": "timeline", "control": "transport", "position": 12}]
+    /// ```
+    ///
+    /// `panel` and `control` are the ids of kind 13; `position` is the frame, counted from 0. The
+    /// shell shows it in place of the described `position` until the next kind 13, which carries
+    /// the current positions itself (and is never followed by a kind 17 repeating them). Entries for
+    /// a transport the shell doesn't show are ignored.
     ///
     /// For kind 8 the shell answers with the location and an error or none (`craft_write_done`,
     /// `CraftNative.writeDone`). The name never holds a line break, so it follows the last one.
@@ -255,6 +273,7 @@ impl Request {
             Request::OpenPanel(id) => (14, id.as_str().into(), None),
             Request::Menus(json) => (15, json.as_str().into(), None),
             Request::Status(json) => (16, json.as_str().into(), None),
+            Request::Live(json) => (17, json.as_str().into(), None),
         }
     }
 }
@@ -445,6 +464,10 @@ impl Platform {
         self.shared.borrow_mut().out.push(Request::Panels(json));
     }
 
+    pub(crate) fn live(&self, json: String) {
+        self.shared.borrow_mut().out.push(Request::Live(json));
+    }
+
     /// Note a file that arrived with a location, so saves to its document path write it back.
     pub(crate) fn remember(&self, file: &PickedFile) {
         if let (Some(location), Some(path)) = (&file.location, file.document_path()) {
@@ -577,6 +600,15 @@ mod tests {
         platform.panels("{}".into());
         let wired: Vec<_> = platform.take_requests().iter().map(|r| r.wire()).map(|(k, t, d)| (k, t.into_owned(), d.is_none())).collect();
         assert_eq!(wired, [(13, "{}".to_owned(), true)]);
+    }
+
+    #[test]
+    fn live_values_go_out_as_kind_17() {
+        let platform = Platform::default();
+        let json = r#"[{"panel":"timeline","control":"transport","position":12}]"#;
+        platform.live(json.into());
+        let wired: Vec<_> = platform.take_requests().iter().map(|r| r.wire()).map(|(k, t, d)| (k, t.into_owned(), d.is_none())).collect();
+        assert_eq!(wired, [(17, json.to_owned(), true)]);
     }
 
     #[test]

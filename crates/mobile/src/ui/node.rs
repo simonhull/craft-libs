@@ -32,6 +32,9 @@ pub enum PanelRole {
     /// A vertical rail at the canvas's leading edge, always on screen while the shell draws the
     /// rail ([`super::Feature::Rail`]): the app's tools ([`super::ToolPalette`]).
     Rail,
+    /// A floating bar above the bottom toolbar, on screen while the app offers it: its
+    /// [`super::Transport`].
+    Transport,
 }
 
 /// A panel the app offers: what the toolbar shows for it.
@@ -86,6 +89,7 @@ impl Panel {
                     Node::Choice(c) => &c.id,
                     Node::ItemList(l) => &l.id,
                     Node::ToolPalette(p) => &p.id,
+                    Node::Transport(t) => &t.id,
                 };
                 if !seen.insert(id) {
                     return Err(UiError::DuplicateControl { panel: panel.clone(), control: id.clone() });
@@ -108,13 +112,49 @@ impl Panel {
                             }
                         }
                     }
-                    Node::Number(_) | Node::Toggle(_) | Node::Choice(_) | Node::ToolPalette(_) => {}
+                    Node::Number(_) | Node::Toggle(_) | Node::Choice(_) | Node::ToolPalette(_) | Node::Transport(_) => {}
                 }
             }
             Ok(())
         }
         walk(&self.id, &self.nodes, &mut HashSet::new())
     }
+
+    /// Equal but for the transports' positions: when only those changed, the host sends the
+    /// positions (wire kind 17) rather than the panel.
+    pub(super) fn same_but_positions(&self, other: &Self) -> bool {
+        let Self { id, title, role, nodes } = self;
+        *id == other.id && *title == other.title && *role == other.role && same_nodes_but_positions(nodes, &other.nodes)
+    }
+
+    /// Its transports, sections included, top to bottom.
+    pub(super) fn transports(&self) -> Vec<&super::Transport> {
+        fn walk<'a>(nodes: &'a [Node], out: &mut Vec<&'a super::Transport>) {
+            for node in nodes {
+                match node {
+                    Node::Transport(t) => out.push(t),
+                    Node::Section(s) => walk(&s.children, out),
+                    Node::Number(_) | Node::Toggle(_) | Node::Choice(_) | Node::ItemList(_) | Node::ToolPalette(_) => {}
+                }
+            }
+        }
+        let mut out = Vec::new();
+        walk(&self.nodes, &mut out);
+        out
+    }
+}
+
+/// See [`Panel::same_but_positions`].
+fn same_nodes_but_positions(a: &[Node], b: &[Node]) -> bool {
+    a.len() == b.len()
+        && a.iter().zip(b).all(|pair| match pair {
+            (Node::Transport(a), Node::Transport(b)) => a.same_but_position(b),
+            (Node::Section(a), Node::Section(b)) => {
+                let Section { id, title, collapsed, children } = a;
+                *id == b.id && *title == b.title && *collapsed == b.collapsed && same_nodes_but_positions(children, &b.children)
+            }
+            (a, b) => a == b,
+        })
 }
 
 /// One primitive.
@@ -133,6 +173,8 @@ pub enum Node {
     ItemList(ItemList),
     /// The app's tools, for a rail.
     ToolPalette(super::ToolPalette),
+    /// A playhead over frames, with play and step buttons.
+    Transport(super::Transport),
 }
 
 /// A titled group of nodes.
@@ -669,6 +711,14 @@ mod tests {
         let rows = Panel::new("p", "P", PanelRole::Tool, vec![Node::ItemList(ItemList::new("l", vec![Row::new(1, "a"), Row::new(1, "b")]))]);
         assert_eq!(rows.check().unwrap_err(), UiError::DuplicateRow { list: "l".into(), row: 1.into() });
         assert!(Panel::new("p", "P", PanelRole::Tool, vec![toggle("a"), toggle("b")]).check().is_ok());
+    }
+
+    #[test]
+    fn check_counts_transports_among_the_controls() {
+        let transport = || Node::Transport(crate::ui::Transport::new("t", 0, 10, crate::ui::Rate::new(24.0).unwrap()).unwrap());
+        let dup = Panel::new("p", "P", PanelRole::Transport, vec![transport(), Node::Section(Section::new("s", "S", vec![transport()]))]);
+        assert_eq!(dup.check().unwrap_err(), UiError::DuplicateControl { panel: "p".into(), control: "t".into() });
+        assert_eq!(serde_json::to_value(PanelRole::Transport).unwrap(), json!("transport"));
     }
 
     #[test]

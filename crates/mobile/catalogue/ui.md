@@ -275,9 +275,40 @@ For example:
 {"action":"edit","panel":"tools","control":"palette","phase":"commit","gesture":11,"value":{"kind":"choice","value":"pencil"}}
 ```
 
+## `transport`
+
+A transport bar, in a panel with the `transport` role: a floating Liquid Glass bar above the bottom toolbar while the app offers it, hidden while the keyboard is up. Buttons go to the start, step back, play or pause, step forward and go to the end; a scrubber drags the playhead, with the work area shaded; a label shows the time. While it plays, its position moves without the panel being described again (request kind 17, below).
+
+**Fields:** `position` is the playhead's frame, counted from 0, below `duration` (at least 1 frame). `rate` is frames per second, above 0 and not necessarily whole (`29.97`). `format` says how the label shows a time, and only that: `frames` (the frame counted from 1, of the duration: `12 / 30`; also when left out) or `timecode` (`HH:MM:SS:FF` at `rate`). `playing` shows Pause in place of Play. `range` is the work area (the loop region) as `[start, end]`, `start` inclusive and `end` exclusive, not empty and ending at `duration` at most; `null` or left out for none. `enabled: false` greys it out.
+
+```json
+{
+  "type": "transport",
+  "id": "transport",
+  "position": 11,
+  "duration": 30,
+  "rate": 24.0,
+  "format": "frames",
+  "playing": false,
+  "range": [
+    0,
+    24
+  ],
+  "enabled": true
+}
+```
+
+**Sends:** `seek` edits from the scrubber, with the `frame`: `begin`, `change` while scrubbing, then `commit` at release (or `cancel`). `transport` edits from the buttons, each one `commit`, naming the action: `play`, `pause`, `stop`, `step_back`, `step_forward`, `to_start` or `to_end`, as `{"kind":"transport","value":"step_forward"}`. What Stop does beyond pausing, and whether stepping pauses, are the app's rules.
+
+For example:
+
+```json
+{"action":"edit","panel":"timeline","control":"transport","phase":"change","gesture":12,"value":{"kind":"seek","value":{"frame":12}}}
+```
+
 ## Wire
 
-The app sends the shell its panels (request kind 13) whenever they change: `panels`, every panel it offers, and `open`, the open ones described, by id. Each entry of `panels` has an `id`, a `title`, an `icon` (an SF Symbol name; Android maps it to a Material icon) and a `role`: `inspector` slides in beside the canvas, `tool` is a popover from its toolbar button, `rail` is a vertical rail at the canvas's leading edge, always on screen (its `tool_palette`).
+The app sends the shell its panels (request kind 13) whenever they change: `panels`, every panel it offers, and `open`, the open ones described, by id. Each entry of `panels` has an `id`, a `title`, an `icon` (an SF Symbol name; Android maps it to a Material icon) and a `role`: `inspector` slides in beside the canvas, `tool` is a popover from its toolbar button, `rail` is a vertical rail at the canvas's leading edge, always on screen (its `tool_palette`), and `transport` is a floating bar above the bottom toolbar, on screen while the app offers it (its `transport`). The shell counts a rail or transport it shows among the panels on screen.
 
 ```json
 {
@@ -315,6 +346,12 @@ The app sends the shell its panels (request kind 13) whenever they change: `pane
 ```
 
 The app can also ask the shell to open one of its panels (request kind 14, the panel's `id` as text; `Platform::open_panel`), for its own way in to a panel the shell now shows natively, such as a menu item. The shell opens it in its role's place, as its toolbar button would, and then says which panels are on screen (`open_panels`, below) as usual; an id the app doesn't offer opens nothing. Unlike the panels, it isn't sent again to a shell that starts listening later.
+
+While a transport plays, only its position changes from frame to frame. Then the app sends the positions alone (request kind 17), not the panels: a list with an entry for each transport whose `position` changed since the shell last heard it, by panel and control `id`. The shell shows it in place of the described `position` until the next description, which carries the current positions itself. Anything else that changes sends the panels as usual. Unlike the panels, it isn't sent again to a shell that starts listening later.
+
+```json
+[{"panel":"timeline","control":"transport","position":12}]
+```
 
 The shell sends messages through the same call as its actions (`craft_action`, `CraftNative.action`). It says which panels are on screen, and gets them all again:
 

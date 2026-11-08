@@ -99,6 +99,8 @@ pub trait CraftApp: eframe::App + 'static {
 
     /// One panel's contents, built from [`ui`] primitives; `None` for an id it doesn't offer.
     /// Called after every frame for the panels on screen, so keep it cheap and deterministic.
+    /// Describe a playing [`ui::Transport`] at its current position every frame: when only
+    /// positions changed, the shell gets those alone, not the panel.
     fn describe(&self, panel: &ui::PanelId) -> Option<ui::Panel> {
         let _ = panel;
         None

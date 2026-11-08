@@ -312,11 +312,16 @@ impl<A: CraftApp> Host<A> {
         self.shown = Some(snapshot);
     }
 
-    /// Tell the shell when the native panels, or the open ones' contents, changed.
+    /// Tell the shell when the native panels, or the open ones' contents, changed: only the
+    /// transports' positions when nothing else did (kind 17), else the panels (kind 13).
     fn publish_panels(&mut self) {
         let app = &self.app;
-        if let Some(json) = self.panels.publish(app.panels(), |id| app.describe(id)) {
+        let outgoing = self.panels.publish(app.panels(), |id| app.describe(id));
+        if let Some(json) = outgoing.panels {
             self.platform.panels(json);
+        }
+        if let Some(json) = outgoing.live {
+            self.platform.live(json);
         }
     }
 
