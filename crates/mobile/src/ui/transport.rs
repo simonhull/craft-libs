@@ -340,6 +340,48 @@ impl Playback {
         changed.then_some(next)
     }
 
+    /// Seconds from `now` until the frame shown changes: when to [`tick`](Self::tick) next, so a
+    /// UI can sleep between frames rather than redraw at the display's rate. Ask after ticking.
+    ///
+    /// `0.0` when a new frame is already due (`now` is on or past the boundary and hasn't been
+    /// ticked). A whole period while the clock has no start yet, for a time that isn't a number, or
+    /// one earlier than the last (the next tick counts on from it). `None` while stopped, and for a
+    /// span of one frame, which never changes.
+    ///
+    /// Exact but for float rounding, which may put the boundary a hair later: a caller that must
+    /// never draw a frame late wakes a little early.
+    ///
+    /// ```
+    /// use craft_mobile::ui::{FrameRange, Playback, Rate};
+    /// # fn main() -> Result<(), craft_mobile::ui::UiError> {
+    /// let mut playback = Playback::new(Rate::new(4.0)?, FrameRange::new(0, 8)?);
+    /// assert_eq!(playback.next_due(0.0), None, "stopped");
+    /// playback.start(10.0, 0);
+    /// assert_eq!(playback.next_due(10.125), Some(0.125), "frame 1 shows at 10.25");
+    /// assert_eq!(playback.next_due(10.25), Some(0.0), "due now");
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn next_due(&self, now: f64) -> Option<f64> {
+        let State::Playing { since } = self.state else {
+            return None;
+        };
+        if self.span.frames().get() == 1 {
+            return None;
+        }
+        let period = self.rate.get().recip();
+        let Some(then) = since.filter(|_| now.is_finite()) else {
+            return Some(period);
+        };
+        // In frames, as `tick` counts them, so the two agree on where the boundary is.
+        let elapsed = (now - then) * self.rate.get();
+        if !(elapsed.is_finite() && elapsed >= 0.0) {
+            return Some(period);
+        }
+        Some(if elapsed >= 1.0 { 0.0 } else { (1.0 - elapsed) * period })
+    }
+
     /// The frame `steps` on from the one shown, wrapped into the span, without overflowing.
     fn advance(&self, steps: u64) -> u64 {
         let len = self.span.frames().get();
@@ -533,6 +575,85 @@ mod tests {
         assert_eq!(p.tick(1.25), Some(2), "and count from there");
         assert_eq!(p.tick(f64::NEG_INFINITY), None);
         assert_eq!(p.frame(), 2);
+    }
+
+    /// Seconds equal to within rounding.
+    fn due(actual: Option<f64>, expected: f64) -> bool {
+        actual.is_some_and(|d| (d - expected).abs() < 1e-9)
+    }
+
+    #[test]
+    fn next_due_is_none_while_stopped() {
+        let mut p = playback((0, 30));
+        assert_eq!(p.next_due(1.0), None, "never started");
+        p.start(0.0, 0);
+        p.stop();
+        assert_eq!(p.next_due(0.1), None, "stopped");
+    }
+
+    #[test]
+    fn next_due_counts_down_to_the_next_frame() {
+        let mut p = playback((0, 30));
+        p.start(10.0, 0);
+        assert!(due(p.next_due(10.0), 0.25), "just started: a whole period");
+        assert!(due(p.next_due(10.125), 0.125), "half way through the period");
+        assert!(due(p.next_due(10.2), 0.05));
+        assert_eq!(p.tick(10.2), None, "and the frame hasn't changed yet");
+    }
+
+    #[test]
+    fn next_due_on_a_boundary_is_now_until_ticked() {
+        let mut p = playback((0, 30));
+        p.start(10.0, 0);
+        assert_eq!(p.next_due(10.25), Some(0.0), "frame 1 is due now");
+        assert_eq!(p.next_due(11.0), Some(0.0), "overdue is due now too");
+        assert_eq!(p.tick(10.25), Some(1));
+        assert!(due(p.next_due(10.25), 0.25), "shown: the next is a whole period on");
+    }
+
+    #[test]
+    fn next_due_after_a_catch_up_keeps_the_remainder() {
+        let mut p = playback((0, 30));
+        p.start(0.0, 0);
+        assert_eq!(p.tick(1.1), Some(4), "a slow frame skips ahead");
+        assert!(due(p.next_due(1.1), 0.15), "frame 5 is due at 1.25, not a period after the tick");
+    }
+
+    #[test]
+    fn ticking_when_due_always_moves_the_playhead() {
+        let mut p = Playback::new(rate(23.976), FrameRange::new(0, 1000).unwrap());
+        let mut now = 3.7;
+        p.start(now, 0);
+        for frame in 1..200 {
+            now += p.next_due(now).unwrap();
+            // Rounding may land a hair short of the boundary: then it is due again at once.
+            let shown = p.tick(now).or_else(|| {
+                assert!(p.next_due(now).unwrap() < 1e-9, "only a hair short, at frame {frame}");
+                p.tick(now + 1e-9)
+            });
+            assert_eq!(shown, Some(frame), "at {now}");
+        }
+    }
+
+    #[test]
+    fn next_due_with_a_bad_or_backwards_time_is_a_period() {
+        let mut p = playback((0, 30));
+        p.start(f64::NAN, 0);
+        assert!(due(p.next_due(2.0), 0.25), "no start time yet: the first good tick starts the clock");
+        assert!(due(p.next_due(f64::NAN), 0.25), "a time that isn't a number");
+        assert!(due(p.next_due(f64::INFINITY), 0.25));
+        p.start(10.0, 0);
+        assert!(due(p.next_due(9.0), 0.25), "backwards: the clock counts on from then");
+        p.start(-f64::MAX, 0);
+        assert!(due(p.next_due(f64::MAX), 0.25), "too far apart to count, as tick");
+        assert_eq!(p.tick(f64::MAX), None, "which holds the frame and counts from then");
+    }
+
+    #[test]
+    fn a_one_frame_span_is_never_due() {
+        let mut p = playback((7, 8));
+        p.start(0.0, 7);
+        assert_eq!(p.next_due(0.5), None, "the frame never changes");
     }
 
     #[test]
