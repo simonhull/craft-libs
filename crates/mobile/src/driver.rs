@@ -156,8 +156,11 @@ impl<W: Window, S: Shell> Driver<W, S> {
             }
             Message::Shell(shell) => {
                 self.shell = shell;
-                // A shell that starts listening later still sees the panels.
+                // A shell that starts listening later still sees the panels: the last ones at once,
+                // then described afresh with the next frame, since the live values that moved their
+                // playheads since aren't replayed.
                 if let Some(shell) = &mut self.shell {
+                    session::with(|h| h.resend_panels());
                     if let Some(json) = &self.state {
                         shell.deliver(&Request::State(json.clone()));
                     }
@@ -342,6 +345,9 @@ mod tests {
         fn detach(&mut self) {
             note("detach".into());
         }
+        fn resend_panels(&mut self) {
+            note("resend panels".into());
+        }
         #[expect(unsafe_code, reason = "implements the trait's unsafe method; the fake touches no handle")]
         unsafe fn attach(&mut self, _target: wgpu::SurfaceTargetUnsafe, _size: ViewSize) -> Result<(), HostError> {
             note("attach".into());
@@ -451,7 +457,7 @@ mod tests {
         SEEN.with(|s| s.borrow_mut().requests = vec![Request::Export { name: "a.png".into(), bytes: vec![] }, Request::Busy(false)]);
         driver.frame();
         assert!(!driver.busy() && !driver.drawing(), "idle without a window: the render thread stops polling");
-        assert_eq!(seen(), ["make", "frame", "detach", "frame"]);
+        assert_eq!(seen(), ["make", "resend panels", "frame", "detach", "frame"]);
         assert_eq!(shell.heard(), ["Busy(true)", "export a.png", "Busy(false)"]);
     }
 
@@ -518,6 +524,23 @@ mod tests {
         driver.handle(Message::Shell(Some(shell.clone())));
         let progress_only = serde_json::to_string(&crate::ui::Status::new().progress(crate::ui::Progress::new("Exporting"))).unwrap();
         assert_eq!(shell.heard(), [r#"Menus("{\"menus\":[]}")"#.to_owned(), format!("{:?}", Request::Status(progress_only))]);
+    }
+
+    /// A late shell gets the panels as they are now: the last description is replayed at once, and
+    /// the app describes them again with the next frame, so playheads moved since by live values
+    /// (wire kind 17, never replayed) aren't left where that description had them.
+    #[test]
+    fn a_late_shell_gets_the_panels_described_afresh() {
+        let mut driver = TestDriver::default();
+        attach(&mut driver);
+        SEEN.with(|s| s.borrow_mut().requests = vec![Request::Panels("{}".into()), Request::Live("[]".into())]);
+        driver.frame();
+        let late = FakeShell::default();
+        driver.handle(Message::Shell(Some(late.clone())));
+        assert_eq!(late.heard(), [r#"Panels("{}")"#], "the last description, not the live values");
+        assert_eq!(seen(), ["make", "frame", "resend panels"], "and a fresh one asked for");
+        driver.handle(Message::Shell(None));
+        assert_eq!(seen().len(), 3, "no shell: nobody to describe them to");
     }
 
     /// Opening a panel is a one-shot: a shell that starts listening later must not open it again.

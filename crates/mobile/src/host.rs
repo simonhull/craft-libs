@@ -99,6 +99,11 @@ pub(crate) trait HostOps {
         expect(dead_code, reason = "only Android takes the view away; iOS keeps its layer for the app's life")
     )]
     unsafe fn attach(&mut self, target: wgpu::SurfaceTargetUnsafe, size: ViewSize) -> Result<(), HostError>;
+    /// Describe the native panels again with the next frame, changed or not (wire kind 13, the
+    /// transports' current positions included): a shell started listening, and the live values it
+    /// missed are never replayed.
+    #[cfg_attr(all(target_os = "ios", not(test)), expect(dead_code, reason = "only Android's shell starts listening after the app"))]
+    fn resend_panels(&mut self);
 }
 
 pub(crate) struct Host<A> {
@@ -372,6 +377,11 @@ impl<A: CraftApp> HostOps for Host<A> {
 
     fn detach(&mut self) {
         self.surface = None;
+    }
+
+    fn resend_panels(&mut self) {
+        self.panels.resend();
+        self.wake();
     }
 
     #[expect(unsafe_code, reason = "wgpu can only make a surface from a raw platform handle")]
