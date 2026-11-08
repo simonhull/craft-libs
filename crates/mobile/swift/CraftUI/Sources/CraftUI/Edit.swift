@@ -17,8 +17,10 @@ public struct CraftEdit: Encodable, Equatable, Sendable {
         case number(Double), toggle(Bool), choice(String)
         case select(row: UInt64, mode: SelectMode = .replace), setVisible(row: UInt64, visible: Bool), rename(row: UInt64, name: String)
         case move(row: UInt64, target: UInt64, position: Position)
-        /// One of a row's actions (``CraftRowAction``) was chosen.
+        /// One of a row's actions (``CraftItemAction``) was chosen.
         case action(row: UInt64, action: String)
+        /// One of the list's own actions (``CraftItemAction``, in its footer) was chosen.
+        case listAction(action: String)
     }
 
     public let panel: String
@@ -79,6 +81,10 @@ public struct CraftEdit: Encodable, Equatable, Sendable {
             try v.encode("action", forKey: .kind)
             var r = v.nestedContainer(keyedBy: RowKey.self, forKey: .value)
             try r.encode(row, forKey: .row)
+            try r.encode(action, forKey: .action)
+        case let .listAction(action):
+            try v.encode("list_action", forKey: .kind)
+            var r = v.nestedContainer(keyedBy: RowKey.self, forKey: .value)
             try r.encode(action, forKey: .action)
         }
     }

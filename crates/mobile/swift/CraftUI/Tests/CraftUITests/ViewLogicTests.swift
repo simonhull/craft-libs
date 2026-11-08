@@ -167,12 +167,22 @@ import Testing
 
     /// Only destructive actions are swipes, in the app's order; every action is in the context menu.
     @Test func destructiveRowActionsAreSwipes() {
-        let close = CraftRowAction(id: "close", label: "Close", icon: "xmark", destructive: true)
-        let dup = CraftRowAction(id: "duplicate", label: "Duplicate")
-        let delete = CraftRowAction(id: "delete", label: "Delete", destructive: true)
+        let close = CraftItemAction(id: "close", label: "Close", icon: "xmark", destructive: true)
+        let dup = CraftItemAction(id: "duplicate", label: "Duplicate")
+        let delete = CraftItemAction(id: "delete", label: "Delete", destructive: true)
         let row = CraftRow(id: 1, title: "a", actions: [close, dup, delete])
         #expect(CraftItemListView.swipeActions(row) == [close, delete])
         #expect(CraftItemListView.swipeActions(CraftRow(id: 2, title: "b")).isEmpty)
+    }
+
+    /// A footer button sends one commit naming the list and the action, in a new gesture each tap.
+    @Test func aListActionIsOneCommit() {
+        let new = CraftItemAction(id: "new_layer", label: "New Layer", icon: "plus")
+        let first = CraftItemListView.listActionEdit(new, panel: "layers", control: "rows")
+        let second = CraftItemListView.listActionEdit(new, panel: "layers", control: "rows")
+        #expect(first.value == .listAction(action: "new_layer"))
+        #expect((first.panel, first.control, first.phase) == ("layers", "rows", .commit))
+        #expect(first.gesture != second.gesture)
     }
 
     @Test func nodesWithTheSameIdStillGetTheirOwnViews() {

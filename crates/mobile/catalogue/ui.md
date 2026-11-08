@@ -127,9 +127,9 @@ A titled group of other nodes; the user can collapse it.
 
 ## `item_list`
 
-Rows of items such as layers, top to bottom: tap to select, swipe to hide, long-press for Rename and the row's own actions, drag to reorder. Select in the header picks several rows, tap by tap, until Done; with a keyboard, Shift-tap selects a range and Command-tap adds or removes a row.
+Rows of items such as layers, top to bottom: tap to select, swipe to hide, long-press for Rename and the row's own actions, drag to reorder. The list's own actions (New Layer) are icon buttons in its footer. Select in the header picks several rows, tap by tap, until Done; with a keyboard, Shift-tap selects a range and Command-tap adds or removes a row.
 
-**Fields:** each row's `id` is the app's own and unique in the list; `depth` indents it (inside groups); `visible: null` means it can't be hidden; `reorderable` allows dragging. A row's `actions` (left out: none) are what the user can do to it, in its context menu after Rename: each has an `id` unique in the row, a `label`, an `icon` (an SF Symbol name, or `null`) and `destructive` (tinted red, and a trailing swipe action too); `icon` and `destructive` may be left out. `rename: "no"` takes Rename… away from a row with no name of its own to change (an open document); left out, a row can be renamed.
+**Fields:** each row's `id` is the app's own and unique in the list; `depth` indents it (inside groups); `visible: null` means it can't be hidden; `reorderable` allows dragging. A row's `actions` (left out: none) are what the user can do to it, in its context menu after Rename: each has an `id` unique in the row, a `label`, an `icon` (an SF Symbol name, or `null`) and `destructive` (tinted red, and a trailing swipe action too); `icon` and `destructive` may be left out. `rename: "no"` takes Rename… away from a row with no name of its own to change (an open document); left out, a row can be renamed. The list's own `actions` (left out: none) are what the user can do to the list rather than to one row, as icon buttons in its footer: the same fields, `id`s unique among them; the `label` names the button for accessibility and as its tooltip, and shows in place of a missing `icon`.
 
 ```json
 {
@@ -181,11 +181,19 @@ Rows of items such as layers, top to bottom: tap to select, swipe to hide, long-
       ]
     }
   ],
-  "reorderable": true
+  "reorderable": true,
+  "actions": [
+    {
+      "id": "new_layer",
+      "label": "New Layer",
+      "icon": "plus",
+      "destructive": false
+    }
+  ]
 }
 ```
 
-**Sends:** `select`, `set_visible`, `rename`, `action` and (when reorderable) `move` edits, each one `commit`, naming rows by their `id`. A `select` has a `mode`: `replace` (a plain tap; also when left out), `toggle` (add the row or take it out) or `range` (from the last row selected to this one). An `action` names the row and the action's `id`: `{"kind":"action","value":{"row":2,"action":"delete"}}`. A `move` names the row dragged; an app moves the whole selection when that row is one of several selected.
+**Sends:** `select`, `set_visible`, `rename`, `action`, `list_action` and (when reorderable) `move` edits, each one `commit`, naming rows by their `id`. A `select` has a `mode`: `replace` (a plain tap; also when left out), `toggle` (add the row or take it out) or `range` (from the last row selected to this one). An `action` names the row and the action's `id`: `{"kind":"action","value":{"row":2,"action":"delete"}}`. A `list_action` names the list action's `id` alone: `{"kind":"list_action","value":{"action":"new_layer"}}`. A `move` names the row dragged; an app moves the whole selection when that row is one of several selected.
 
 For example:
 

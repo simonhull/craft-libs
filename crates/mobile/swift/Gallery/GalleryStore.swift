@@ -178,8 +178,8 @@ extension CraftNode {
             return .choice(id: id, label: label, value: new, options: options, enabled: enabled)
         case let (.toolPalette(palette), .choice(tool)) where palette.id == control && palette.slots.contains { $0.tools.contains { $0.id == tool } }:
             return .toolPalette(palette.selecting(tool))
-        case let (.itemList(id, rows, reorderable), _) where id == control:
-            return .itemList(id: id, rows: rows.applying(value, reorderable: reorderable), reorderable: reorderable)
+        case let (.itemList(id, rows, reorderable, actions), _) where id == control:
+            return .itemList(id: id, rows: rows.applying(value, reorderable: reorderable), reorderable: reorderable, actions: actions)
         default:
             return self
         }
@@ -210,7 +210,7 @@ extension [CraftRow] {
             guard let at = rows.firstIndex(where: { $0.id == target }) else { return self }
             rows.insert(moving, at: position == .above ? at : at + 1)
             return rows
-        case .number, .toggle, .choice, .action:
+        case .number, .toggle, .choice, .action, .listAction:
             // An action means what the app says it does; the Gallery only logs it (Edits Sent).
             return self
         }

@@ -70,11 +70,12 @@ impl Panel {
     }
 
     /// Check the ids the shell relies on: controls are unique within the panel (sections
-    /// included), rows are unique within their list, and actions within their row.
+    /// included), rows are unique within their list, a list's own actions within the list, and a
+    /// row's actions within their row.
     ///
     /// # Errors
-    /// [`UiError::DuplicateControl`], [`UiError::DuplicateRow`] or [`UiError::DuplicateRowAction`]
-    /// for the first repeat found.
+    /// [`UiError::DuplicateControl`], [`UiError::DuplicateRow`], [`UiError::DuplicateListAction`] or
+    /// [`UiError::DuplicateRowAction`] for the first repeat found.
     pub fn check(&self) -> Result<(), UiError> {
         fn walk<'a>(panel: &PanelId, nodes: &'a [Node], seen: &mut HashSet<&'a ControlId>) -> Result<(), UiError> {
             for node in nodes {
@@ -95,6 +96,10 @@ impl Panel {
                         let mut rows = HashSet::new();
                         if let Some(dup) = l.rows.iter().find(|r| !rows.insert(r.id)) {
                             return Err(UiError::DuplicateRow { list: id.clone(), row: dup.id });
+                        }
+                        let mut actions = HashSet::new();
+                        if let Some(dup) = l.actions.iter().find(|a| !actions.insert(&a.id)) {
+                            return Err(UiError::DuplicateListAction { list: id.clone(), action: dup.id.clone() });
                         }
                         for row in &l.rows {
                             let mut actions = HashSet::new();
@@ -387,43 +392,50 @@ number_id! {
     RowId
 }
 
-/// A row action's id, the app's own (`close`, `delete`), unique within its row.
+/// An [`ItemAction`]'s id, the app's own (`close`, `delete`, `new_layer`): unique within its row,
+/// or among its list's own actions.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct ActionId(String);
 
 id_newtype!(ActionId);
 
-/// Something the user can do to one row (Close a document, Delete a layer): the shell offers it in
-/// the row's context menu, and a destructive one as a swipe action too. Chosen, it sends
-/// [`super::EditValue::Action`].
+/// Something the user can do in an [`ItemList`], to one row or to the list itself.
+///
+/// - A row's ([`Row::actions`]: Close a document, Delete a layer): the shell offers it in the row's
+///   context menu, and a destructive one as a swipe action too. Chosen, it sends
+///   [`super::EditValue::Action`].
+/// - The list's own ([`ItemList::actions`]: New Layer, New Group): the shell shows it as an icon
+///   button in the list's footer. Chosen, it sends [`super::EditValue::ListAction`].
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RowAction {
+pub struct ItemAction {
     id: ActionId,
     label: String,
     /// An SF Symbol name; Android maps it to a Material icon.
     #[serde(default)]
     icon: Option<String>,
-    /// It destroys something (Close, Delete): the shell tints it red and offers it as a swipe.
+    /// It destroys something (Close, Delete): the shell tints it red, and offers a row's as a swipe.
     #[serde(default)]
     destructive: bool,
 }
 
-impl RowAction {
-    /// A plain action without an icon: `id` is what the edit carries, `label` what the user sees.
+impl ItemAction {
+    /// A plain action without an icon: `id` is what the edit carries, `label` what the user sees
+    /// (in a menu, or as a footer button's accessibility label and tooltip).
     #[must_use]
     pub fn new(id: impl Into<ActionId>, label: impl Into<String>) -> Self {
         Self { id: id.into(), label: label.into(), icon: None, destructive: false }
     }
 
-    /// An SF Symbol beside the label (`xmark`, `trash`).
+    /// An SF Symbol beside the label (`xmark`, `trash`); a list's footer button shows it alone,
+    /// and the label where there is none.
     #[must_use]
     pub fn icon(mut self, symbol: Option<impl Into<String>>) -> Self {
         self.icon = symbol.map(Into::into);
         self
     }
 
-    /// It destroys something: tinted red, and a swipe action too.
+    /// It destroys something: tinted red, and a row's is a swipe action too.
     #[must_use]
     pub fn destructive(mut self, destructive: bool) -> Self {
         self.destructive = destructive;
@@ -466,7 +478,7 @@ pub struct Row {
     selected: bool,
     /// Left out of the JSON when there are none; missing means none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    actions: Vec<RowAction>,
+    actions: Vec<ItemAction>,
     /// Left out of the JSON when allowed; missing means allowed.
     #[serde(default, skip_serializing_if = "Rename::is_allowed")]
     rename: Rename,
@@ -523,27 +535,38 @@ impl Row {
         self
     }
 
-    /// What the user can do to the row, in menu order ([`RowAction`]); ids unique in the row.
+    /// What the user can do to the row, in menu order ([`ItemAction`]); ids unique in the row.
     #[must_use]
-    pub fn actions(mut self, actions: Vec<RowAction>) -> Self {
+    pub fn actions(mut self, actions: Vec<ItemAction>) -> Self {
         self.actions = actions;
         self
     }
 }
 
-/// Rows of items, top to bottom.
+/// Rows of items, top to bottom, and what the user can do to the list itself.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ItemList {
     id: ControlId,
     rows: Vec<Row>,
     reorderable: bool,
+    /// Left out of the JSON when there are none; missing means none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    actions: Vec<ItemAction>,
 }
 
 impl ItemList {
     /// A fixed-order list.
     #[must_use]
     pub fn new(id: impl Into<ControlId>, rows: Vec<Row>) -> Self {
-        Self { id: id.into(), rows, reorderable: false }
+        Self { id: id.into(), rows, reorderable: false, actions: Vec::new() }
+    }
+
+    /// What the user can do to the list rather than to one row (New Layer, New Group), in footer
+    /// order ([`ItemAction`]); ids unique among them.
+    #[must_use]
+    pub fn actions(mut self, actions: Vec<ItemAction>) -> Self {
+        self.actions = actions;
+        self
     }
 
     /// Rows can be dragged to a new place ([`super::EditValue::Move`]).
@@ -664,7 +687,7 @@ mod tests {
     #[test]
     fn row_actions_serialize_and_default_to_none() {
         let row = Row::new(3, "a.psd")
-            .actions(vec![RowAction::new("close", "Close").icon(Some("xmark")).destructive(true), RowAction::new("duplicate", "Duplicate")]);
+            .actions(vec![ItemAction::new("close", "Close").icon(Some("xmark")).destructive(true), ItemAction::new("duplicate", "Duplicate")]);
         assert_eq!(
             serde_json::to_value(&row).unwrap()["actions"],
             json!([
@@ -680,8 +703,8 @@ mod tests {
             json!({"id": 3, "title": "a", "subtitle": "", "depth": 0, "visible": null, "selected": false, "actions": [{"id": "close", "label": "Close"}]}),
         )
         .unwrap();
-        assert_eq!(partial, Row::new(3, "a").actions(vec![RowAction::new("close", "Close")]), "icon and destructive are optional");
-        assert_eq!(RowAction::new("close", "Close").id().as_str(), "close");
+        assert_eq!(partial, Row::new(3, "a").actions(vec![ItemAction::new("close", "Close")]), "icon and destructive are optional");
+        assert_eq!(ItemAction::new("close", "Close").id().as_str(), "close");
     }
 
     /// A row is renamable unless it says otherwise; the JSON says so only for one that isn't, and a
@@ -701,9 +724,41 @@ mod tests {
 
     #[test]
     fn check_finds_duplicate_row_actions() {
-        let twice = vec![RowAction::new("close", "Close"), RowAction::new("close", "Close Again")];
+        let twice = vec![ItemAction::new("close", "Close"), ItemAction::new("close", "Close Again")];
         let panel = Panel::new("p", "P", PanelRole::Inspector, vec![Node::ItemList(ItemList::new("l", vec![Row::new(1, "a").actions(twice)]))]);
         assert_eq!(panel.check().unwrap_err(), UiError::DuplicateRowAction { list: "l".into(), row: 1.into(), action: "close".into() });
+    }
+
+    /// A list's own actions are on the wire as listed; a list without any leaves them out, and one
+    /// from an older app (no `actions`) has none.
+    #[test]
+    fn list_actions_serialize_and_default_to_none() {
+        let list = ItemList::new("rows", vec![Row::new(1, "a")])
+            .actions(vec![ItemAction::new("new_layer", "New Layer").icon(Some("plus")), ItemAction::new("new_group", "New Group")]);
+        assert_eq!(
+            serde_json::to_value(Node::ItemList(list.clone())).unwrap()["actions"],
+            json!([
+                {"id": "new_layer", "label": "New Layer", "icon": "plus", "destructive": false},
+                {"id": "new_group", "label": "New Group", "icon": null, "destructive": false}
+            ])
+        );
+        let back: Node = serde_json::from_value(serde_json::to_value(Node::ItemList(list.clone())).unwrap()).unwrap();
+        assert_eq!(back, Node::ItemList(list));
+        let plain = ItemList::new("rows", vec![]);
+        assert!(serde_json::to_value(Node::ItemList(plain.clone())).unwrap().get("actions").is_none(), "none, left out");
+        let old: Node = serde_json::from_value(json!({"type": "item_list", "id": "rows", "rows": [], "reorderable": false})).unwrap();
+        assert_eq!(old, Node::ItemList(plain));
+    }
+
+    #[test]
+    fn check_finds_duplicate_list_actions() {
+        let twice = vec![ItemAction::new("new", "New"), ItemAction::new("new", "New Again")];
+        let panel = Panel::new("p", "P", PanelRole::Inspector, vec![Node::ItemList(ItemList::new("l", vec![]).actions(twice))]);
+        assert_eq!(panel.check().unwrap_err(), UiError::DuplicateListAction { list: "l".into(), action: "new".into() });
+        let distinct = vec![ItemAction::new("new", "New")];
+        let row = Row::new(1, "a").actions(vec![ItemAction::new("new", "New")]);
+        let ok = Panel::new("p", "P", PanelRole::Inspector, vec![Node::ItemList(ItemList::new("l", vec![row]).actions(distinct))]);
+        assert!(ok.check().is_ok(), "a row's action may share an id with the list's: they send different edits");
     }
 
     #[test]
@@ -722,7 +777,7 @@ mod tests {
                                 .subtitle("Pixel")
                                 .visible(Some(true))
                                 .selected(true)
-                                .actions(vec![RowAction::new("delete", "Delete").icon(Some("trash")).destructive(true)]),
+                                .actions(vec![ItemAction::new("delete", "Delete").icon(Some("trash")).destructive(true)]),
                         ],
                     )
                     .reorderable(true),

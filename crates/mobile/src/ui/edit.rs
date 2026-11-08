@@ -82,10 +82,16 @@ pub enum EditValue {
         /// Above or below that row.
         position: Position,
     },
-    /// One of a row's actions ([`super::RowAction`]) was chosen; always a [`Phase::Commit`].
+    /// One of a row's actions ([`super::ItemAction`]) was chosen; always a [`Phase::Commit`].
     Action {
         /// The row's id.
         row: RowId,
+        /// The action's id.
+        action: ActionId,
+    },
+    /// One of the list's own actions ([`super::ItemList::actions`]) was chosen; always a
+    /// [`Phase::Commit`].
+    ListAction {
         /// The action's id.
         action: ActionId,
     },
@@ -218,6 +224,16 @@ mod tests {
         let Message::Edit(edit) = m else { panic!("not an edit: {m:?}") };
         assert_eq!(edit.value, EditValue::Action { row: 2.into(), action: "close".into() });
         assert_eq!(serde_json::to_value(&edit.value).unwrap(), json!({"kind": "action", "value": {"row": 2, "action": "close"}}));
+    }
+
+    /// A list action names the action alone: exactly what the Swift `CraftEdit` encodes.
+    #[test]
+    fn a_list_action_parses() {
+        let m: Message = serde_json::from_str(r#"{"action":"edit","panel":"layers","control":"rows","phase":"commit","gesture":5,"value":{"kind":"list_action","value":{"action":"new_layer"}}}"#).unwrap();
+        let Message::Edit(edit) = m else { panic!("not an edit: {m:?}") };
+        assert_eq!(edit.value, EditValue::ListAction { action: "new_layer".into() });
+        assert_eq!(serde_json::to_value(&edit.value).unwrap(), json!({"kind": "list_action", "value": {"action": "new_layer"}}));
+        assert_eq!(serde_json::from_value::<EditValue>(serde_json::to_value(&edit.value).unwrap()).unwrap(), edit.value);
     }
 
     #[test]

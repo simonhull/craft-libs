@@ -78,9 +78,9 @@ import UIKit
             return .number(id: id, label: label, value: 0.5, min: min, max: max, step: step, unit: unit, enabled: enabled, scale: scale)
         }
         let renamed = Fixtures.layers.nodes.map { node -> CraftNode in
-            guard case let .itemList(id, rows, reorderable) = node else { return node }
+            guard case let .itemList(id, rows, reorderable, actions) = node else { return node }
             let renamedRows = rows.map { $0.id == 2 ? CraftRow(id: 2, title: "Sea", subtitle: $0.subtitle, depth: $0.depth, visible: $0.visible, selected: $0.selected) : $0 }
-            return .itemList(id: id, rows: renamedRows, reorderable: reorderable)
+            return .itemList(id: id, rows: renamedRows, reorderable: reorderable, actions: actions)
         }
         let v = try #require(Self.variants.first)
         let url = Self.dir.appending(path: "layers-\(v.name)-\(Self.runtime).png")

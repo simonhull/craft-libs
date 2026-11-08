@@ -93,7 +93,7 @@ pub use command::{CommandId, Shortcut, named_keys};
 pub use edit::{Edit, EditError, EditValue, GestureId, Message, Phase, Position, SelectMode};
 pub use menu::{Menu, MenuBar, MenuCommand, MenuEntry, MenuRole, Submenu};
 pub use node::{
-    ActionId, Choice, ChoiceOption, ControlId, ItemList, Node, Number, Panel, PanelId, PanelInfo, PanelRole, Rename, Row, RowAction, RowId, Scale,
+    ActionId, Choice, ChoiceOption, ControlId, ItemAction, ItemList, Node, Number, Panel, PanelId, PanelInfo, PanelRole, Rename, Row, RowId, Scale,
     Section, Toggle, Unit,
 };
 pub(crate) use publish::PanelsState;
@@ -148,6 +148,14 @@ pub enum UiError {
         list: ControlId,
         /// The repeated row id.
         row: RowId,
+    },
+    /// Two of a list's own actions share an id.
+    #[error("list `{list}` has action `{action}` twice")]
+    DuplicateListAction {
+        /// The list control.
+        list: ControlId,
+        /// The repeated action id.
+        action: ActionId,
     },
     /// Two actions of a row share an id.
     #[error("list `{list}`: row {row} has action `{action}` twice")]

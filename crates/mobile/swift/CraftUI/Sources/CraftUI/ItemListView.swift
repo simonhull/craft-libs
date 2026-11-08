@@ -3,11 +3,14 @@ import SwiftUI
 /// Rows of items such as layers: tap to select, swipe or tap the eye to hide, long-press to rename
 /// (unless the row says it can't be) or for the row's own actions (a destructive one is a swipe too), drag to reorder (when `reorderable`). Select (in the header) picks several rows, a tap adding or
 /// removing each, until Done; with a hardware keyboard, Command-tap does the same and Shift-tap
-/// selects a range. Selected rows are tinted.
+/// selects a range. Selected rows are tinted. The list's own actions (New Layer) are a row of icon
+/// buttons in its footer, as a layers panel's.
 struct CraftItemListView: View {
     let id: String
     let rows: [CraftRow]
     let reorderable: Bool
+    /// The list's own actions, for the footer.
+    var actions: [CraftItemAction] = []
     let panel: String
     let send: @MainActor (CraftEdit) -> Void
     @State private var renaming: CraftRow?
@@ -32,6 +35,10 @@ struct CraftItemListView: View {
                     .textCase(nil)
                     .accessibilityHint(multiSelecting ? "Stop picking rows" : "Pick several rows")
                 }
+            }
+        } footer: {
+            if !actions.isEmpty {
+                footer
             }
         }
         .alert("Rename", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
@@ -95,8 +102,40 @@ struct CraftItemListView: View {
             act: { one(.action(row: row.id, action: $0.id)) }))
     }
 
+    /// The list's own actions: compact icon buttons, trailing, each a full 44 pt target.
+    private var footer: some View {
+        HStack(spacing: 0) {
+            Spacer()
+            ForEach(actions) { action in
+                Button {
+                    send(Self.listActionEdit(action, panel: panel, control: id))
+                } label: {
+                    Group {
+                        if let icon = action.icon {
+                            Image(systemName: icon).imageScale(.large)
+                        } else {
+                            Text(action.label).font(.subheadline)
+                        }
+                    }
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(action.destructive ? AnyShapeStyle(.red) : AnyShapeStyle(.tint))
+                .accessibilityLabel(action.label)
+                .help(action.label)
+            }
+        }
+        .textCase(nil)
+    }
+
+    /// The edit a footer button sends: one commit, in a gesture of its own.
+    nonisolated static func listActionEdit(_ action: CraftItemAction, panel: String, control: String) -> CraftEdit {
+        CraftEdit(panel: panel, control: control, phase: .commit, gesture: GestureID.next(), value: .listAction(action: action.id))
+    }
+
     /// One of the row's actions, red when destructive.
-    private func actionButton(_ action: CraftRowAction, row: CraftRow) -> some View {
+    private func actionButton(_ action: CraftItemAction, row: CraftRow) -> some View {
         Button(role: action.destructive ? .destructive : nil) {
             one(.action(row: row.id, action: action.id))
         } label: {
@@ -109,7 +148,7 @@ struct CraftItemListView: View {
     }
 
     /// The row's actions offered as a trailing swipe: the destructive ones, in the app's order.
-    nonisolated static func swipeActions(_ row: CraftRow) -> [CraftRowAction] {
+    nonisolated static func swipeActions(_ row: CraftRow) -> [CraftItemAction] {
         row.actions.filter(\.destructive)
     }
 
@@ -211,7 +250,7 @@ private struct RowAccessibility: ViewModifier {
     let select: () -> Void
     let setVisible: (Bool) -> Void
     let rename: () -> Void
-    let act: (CraftRowAction) -> Void
+    let act: (CraftItemAction) -> Void
 
     func body(content: Content) -> some View {
         let traits: AccessibilityTraits = row.selected ? [.isButton, .isSelected] : [.isButton]

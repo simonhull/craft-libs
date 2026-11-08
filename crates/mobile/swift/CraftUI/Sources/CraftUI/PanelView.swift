@@ -57,8 +57,8 @@ struct CraftNodeView: View {
         case let .choice(id, label, value, options, enabled):
             CraftChoiceView(id: id, label: label, value: value, options: options, panel: panel, send: send)
                 .disabled(!enabled)
-        case let .itemList(id, rows, reorderable):
-            CraftItemListView(id: id, rows: rows, reorderable: reorderable, panel: panel, send: send)
+        case let .itemList(id, rows, reorderable, actions):
+            CraftItemListView(id: id, rows: rows, reorderable: reorderable, actions: actions, panel: panel, send: send)
         case let .toolPalette(palette):
             // In a panel, a row of the same tools; the rail itself is the shell's (`rail` role).
             ScrollView(.horizontal) {
@@ -131,8 +131,8 @@ extension CraftPanel {
 
     /// The catalogue's row actions: Duplicate, and Delete (destructive, so a swipe too).
     static let previewRowActions = [
-        CraftRowAction(id: "duplicate", label: "Duplicate", icon: "plus.square.on.square"),
-        CraftRowAction(id: "delete", label: "Delete", icon: "trash", destructive: true),
+        CraftItemAction(id: "duplicate", label: "Duplicate", icon: "plus.square.on.square"),
+        CraftItemAction(id: "delete", label: "Delete", icon: "trash", destructive: true),
     ]
 
     /// A tool popover with a menu choice, stepped numbers (Size on a log scale) and a collapsed

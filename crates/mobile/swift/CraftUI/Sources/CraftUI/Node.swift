@@ -77,15 +77,17 @@ public struct CraftChoiceOption: Decodable, Equatable, Identifiable, Sendable {
     }
 }
 
-/// Something the user can do to one row (`ui::RowAction`): Close a document, Delete a layer. It
-/// shows in the row's context menu, and as a swipe action too when `destructive`; chosen, it sends
-/// an `action` edit with its `id`.
-public struct CraftRowAction: Decodable, Equatable, Identifiable, Sendable {
+/// Something the user can do in an item list (`ui::ItemAction`), to one row or to the list itself.
+/// - A row's (Close a document, Delete a layer) shows in the row's context menu, and as a swipe
+///   action too when `destructive`; chosen, it sends an `action` edit with the row and its `id`.
+/// - The list's own (New Layer, New Group) is an icon button in the list's footer, named by its
+///   `label` for VoiceOver and as its tooltip; chosen, it sends a `list_action` edit with its `id`.
+public struct CraftItemAction: Decodable, Equatable, Identifiable, Sendable {
     public let id: String
     public let label: String
     /// An SF Symbol name, or `nil` for none.
     public let icon: String?
-    /// It destroys something: tinted red, and a trailing swipe action.
+    /// It destroys something: tinted red, and a row's is a trailing swipe action.
     public let destructive: Bool
 
     public init(id: String, label: String, icon: String? = nil, destructive: Bool = false) {
@@ -96,7 +98,7 @@ public struct CraftRowAction: Decodable, Equatable, Identifiable, Sendable {
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: Key.self)
-        self = try CraftRowAction(
+        self = try CraftItemAction(
             id: c.decode(String.self, forKey: .id), label: c.decode(String.self, forKey: .label),
             icon: c.decodeIfPresent(String.self, forKey: .icon), destructive: c.decodeIfPresent(Bool.self, forKey: .destructive) ?? false)
     }
@@ -114,7 +116,7 @@ public struct CraftRow: Decodable, Equatable, Identifiable, Sendable {
     public let selected: Bool
     /// What the user can do to the row, in menu order; none when the app leaves them out. One that
     /// doesn't decode is skipped.
-    public let actions: [CraftRowAction]
+    public let actions: [CraftItemAction]
     /// Whether Rename… is offered.
     public let rename: Rename
 
@@ -130,7 +132,7 @@ public struct CraftRow: Decodable, Equatable, Identifiable, Sendable {
 
     public init(
         id: UInt64, title: String, subtitle: String = "", depth: UInt32 = 0, visible: Bool? = nil, selected: Bool = false,
-        actions: [CraftRowAction] = [], rename: Rename = .allowed
+        actions: [CraftItemAction] = [], rename: Rename = .allowed
     ) {
         (self.id, self.title, self.subtitle, self.depth, self.visible, self.selected, self.actions, self.rename) =
             (id, title, subtitle, depth, visible, selected, actions, rename)
@@ -144,7 +146,7 @@ public struct CraftRow: Decodable, Equatable, Identifiable, Sendable {
             id: c.decode(UInt64.self, forKey: .id), title: c.decode(String.self, forKey: .title),
             subtitle: c.decode(String.self, forKey: .subtitle), depth: c.decode(UInt32.self, forKey: .depth),
             visible: c.decodeIfPresent(Bool.self, forKey: .visible), selected: c.decode(Bool.self, forKey: .selected),
-            actions: (c.decodeIfPresent([Skippable<CraftRowAction>].self, forKey: .actions) ?? []).compactMap(\.value),
+            actions: (c.decodeIfPresent([Skippable<CraftItemAction>].self, forKey: .actions) ?? []).compactMap(\.value),
             rename: c.decodeIfPresent(Rename.self, forKey: .rename) ?? .allowed)
     }
 }
@@ -158,7 +160,8 @@ public indirect enum CraftNode: Decodable, Equatable, Sendable {
     case number(id: String, label: String, value: Double, min: Double, max: Double, step: Double?, unit: Unit, enabled: Bool, scale: Scale = .linear)
     case toggle(id: String, label: String, value: Bool, enabled: Bool)
     case choice(id: String, label: String, value: String, options: [CraftChoiceOption], enabled: Bool)
-    case itemList(id: String, rows: [CraftRow], reorderable: Bool)
+    /// `actions` are the list's own (its footer's buttons), not a row's.
+    case itemList(id: String, rows: [CraftRow], reorderable: Bool, actions: [CraftItemAction] = [])
     case toolPalette(CraftToolPalette)
     /// A type this kit doesn't know (the app is newer).
     case unknown(type: String)
@@ -185,7 +188,7 @@ public indirect enum CraftNode: Decodable, Equatable, Sendable {
     }
 
     private enum Key: String, CodingKey {
-        case type, id, title, collapsed, children, label, value, min, max, step, unit, enabled, scale, options, rows, reorderable
+        case type, id, title, collapsed, children, label, value, min, max, step, unit, enabled, scale, options, rows, reorderable, actions
     }
 
     public init(from decoder: any Decoder) throws {
@@ -215,7 +218,9 @@ public indirect enum CraftNode: Decodable, Equatable, Sendable {
         case "item_list":
             self = try .itemList(
                 id: c.decode(String.self, forKey: .id), rows: c.decode([CraftRow].self, forKey: .rows),
-                reorderable: c.decode(Bool.self, forKey: .reorderable))
+                reorderable: c.decode(Bool.self, forKey: .reorderable),
+                // Left out (an older app) or not a list: none. One action that doesn't decode is skipped.
+                actions: ((try? c.decodeIfPresent([Skippable<CraftItemAction>].self, forKey: .actions)) ?? []).compactMap(\.value))
         case "tool_palette":
             self = try .toolPalette(CraftToolPalette(from: decoder))
         default:
@@ -252,7 +257,7 @@ public indirect enum CraftNode: Decodable, Equatable, Sendable {
     public var id: String {
         switch self {
         case let .section(id, _, _, _), let .number(id, _, _, _, _, _, _, _, _), let .toggle(id, _, _, _),
-             let .choice(id, _, _, _, _), let .itemList(id, _, _):
+             let .choice(id, _, _, _, _), let .itemList(id, _, _, _):
             id
         case let .toolPalette(palette):
             palette.id

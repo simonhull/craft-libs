@@ -134,6 +134,7 @@ enum JSONValue: Decodable, Equatable {
             (.rename(row: 4, name: "Sky"), #"{"kind":"rename","value":{"row":4,"name":"Sky"}}"#),
             (.move(row: 4, target: 9, position: .below), #"{"kind":"move","value":{"row":4,"target":9,"position":"below"}}"#),
             (.action(row: 4, action: "close"), #"{"kind":"action","value":{"row":4,"action":"close"}}"#),
+            (.listAction(action: "new_layer"), #"{"kind":"list_action","value":{"action":"new_layer"}}"#),
         ]
         for (value, json) in edits {
             let edit = CraftEdit(panel: "layers", control: "rows", phase: .commit, gesture: 1, value: value)
@@ -146,14 +147,14 @@ enum JSONValue: Decodable, Equatable {
     /// The catalogue's layer rows carry a plain and a destructive action.
     @Test func theCataloguesRowsHaveActions() throws {
         let entry = try #require(try Self.catalogue().primitives.first { $0.name == "item_list" })
-        guard case let .itemList(_, rows, _) = entry.example else {
+        guard case let .itemList(_, rows, _, _) = entry.example else {
             Issue.record("item_list didn't decode: \(entry.example)")
             return
         }
         let actions = try #require(rows.first?.actions)
         #expect(actions == [
-            CraftRowAction(id: "duplicate", label: "Duplicate", icon: "plus.square.on.square"),
-            CraftRowAction(id: "delete", label: "Delete", icon: "trash", destructive: true),
+            CraftItemAction(id: "duplicate", label: "Duplicate", icon: "plus.square.on.square"),
+            CraftItemAction(id: "delete", label: "Delete", icon: "trash", destructive: true),
         ])
         #expect(actions.filter(\.destructive).map(\.id) == ["delete"], "the swipe actions")
     }
@@ -165,7 +166,31 @@ enum JSONValue: Decodable, Equatable {
         #expect(old.actions.isEmpty)
         let json = #"{"id":1,"title":"a","subtitle":"","depth":0,"visible":null,"selected":false,"actions":[{"id":"close","label":"Close"},{"label":"no id"},{"id":"rm","label":"Remove","icon":"trash","destructive":true}]}"#
         let row = try JSONDecoder().decode(CraftRow.self, from: Data(json.utf8))
-        #expect(row.actions == [CraftRowAction(id: "close", label: "Close"), CraftRowAction(id: "rm", label: "Remove", icon: "trash", destructive: true)])
+        #expect(row.actions == [CraftItemAction(id: "close", label: "Close"), CraftItemAction(id: "rm", label: "Remove", icon: "trash", destructive: true)])
+    }
+
+    /// The catalogue's list offers New Layer in its footer.
+    @Test func theCataloguesListHasActions() throws {
+        let entry = try #require(try Self.catalogue().primitives.first { $0.name == "item_list" })
+        guard case let .itemList(_, _, _, actions) = entry.example else {
+            Issue.record("item_list didn't decode: \(entry.example)")
+            return
+        }
+        #expect(actions == [CraftItemAction(id: "new_layer", label: "New Layer", icon: "plus")])
+    }
+
+    /// A list from an older app has no actions of its own; one that doesn't decode is skipped, the
+    /// others kept, and the list still shows.
+    @Test func listActionsAreOptionalAndLenient() throws {
+        func list(_ extra: String) throws -> CraftNode {
+            try JSONDecoder().decode(CraftNode.self, from: Data(#"{"type":"item_list","id":"rows","rows":[],"reorderable":false\#(extra)}"#.utf8))
+        }
+        #expect(try list("") == .itemList(id: "rows", rows: [], reorderable: false, actions: []))
+        let lenient = try list(#","actions":[{"id":"new","label":"New Layer","icon":"plus"},{"icon":"folder"},{"id":"group","label":"New Group"}]"#)
+        #expect(lenient == .itemList(id: "rows", rows: [], reorderable: false, actions: [
+            CraftItemAction(id: "new", label: "New Layer", icon: "plus"), CraftItemAction(id: "group", label: "New Group"),
+        ]))
+        #expect(try list(#","actions":"nonsense""#) == .itemList(id: "rows", rows: [], reorderable: false, actions: []), "not a list: none")
     }
 
     /// A row says when it can't be renamed; left out, or a value this kit doesn't know, it can.
