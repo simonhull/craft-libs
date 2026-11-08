@@ -145,23 +145,22 @@ final class GalleryStore {
         ["transport", everything, timeline]
     }
 
-    /// Plays the transport while it says it's playing, as an app would with `Playback`: the frame
-    /// follows the clock (not the timer's ticks), wrapping within the work area or else all of it,
-    /// and only a changed frame is sent, as a live position.
+    /// Plays the transport while it says it's playing, as PhotoCraft does with `Playback`: the frame
+    /// follows the clock (not the timer's ticks), looping over the whole duration (the work area is
+    /// only shown), and only a changed frame is sent, as a live position.
     private func playIfPlaying() {
-        // Every edit starts it again from where the edit left the playhead (a seek while playing).
+        // Every edit starts it again from where the edit left the playhead (Play pressed again).
         playback?.cancel()
         playback = nil
         guard let t = transport, t.playing else { return }
-        let span = t.range ?? 0..<t.duration
-        let from = span.contains(t.position) ? t.position : span.lowerBound
+        let from = t.position
         let start = ContinuousClock.now
         playback = Task { [weak self] in
             var shown = from
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1 / t.rate))
                 let elapsed = start.duration(to: .now) / .seconds(1)
-                let frame = span.lowerBound + (from - span.lowerBound + UInt64(elapsed * t.rate)) % UInt64(span.count)
+                let frame = (from + UInt64(elapsed * t.rate)) % t.duration
                 guard let self, !Task.isCancelled else { return }
                 if frame != shown {
                     shown = frame
@@ -233,7 +232,8 @@ extension CraftNode {
         case let (.toolPalette(palette), .choice(tool)) where palette.id == control && palette.slots.contains { $0.tools.contains { $0.id == tool } }:
             return .toolPalette(palette.selecting(tool))
         case let (.transport(transport), .seek(frame)) where transport.id == control:
-            return .transport(transport.with(position: frame))
+            // A scrub pauses, as in PhotoCraft.
+            return .transport(transport.with(position: frame, playing: false))
         case let (.transport(transport), .transport(action)) where transport.id == control:
             return .transport(transport.applying(action))
         case let (.itemList(id, rows, reorderable, actions), _) where id == control:
@@ -276,18 +276,17 @@ extension [CraftRow] {
 }
 
 extension CraftTransport {
-    /// A button's action, as PhotoCraft plays its timeline: Stop pauses, and rewinds to the start
-    /// of the work area if already paused; stepping pauses and stops at the ends.
+    /// A button's action, as PhotoCraft plays its timeline: Stop pauses, and rewinds to the first
+    /// frame if already paused; stepping and jumping pause, and stepping stops at the ends.
     func applying(_ action: CraftTransportAction) -> CraftTransport {
-        let start = range?.lowerBound ?? 0
-        return switch action {
+        switch action {
         case .play: with(playing: true)
         case .pause: with(playing: false)
-        case .stop: playing ? with(playing: false) : with(position: start)
+        case .stop: playing ? with(playing: false) : with(position: 0)
         case .stepBack: with(position: position == 0 ? 0 : position - 1, playing: false)
         case .stepForward: with(position: position + 1, playing: false)
-        case .toStart: with(position: 0)
-        case .toEnd: with(position: duration - 1)
+        case .toStart: with(position: 0, playing: false)
+        case .toEnd: with(position: duration - 1, playing: false)
         }
     }
 }
