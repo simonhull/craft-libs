@@ -69,6 +69,26 @@ import UIKit
         }
     }
 
+    /// The transport as the shell's floating bar over a mid-grey canvas (frame 12 of 30, the work
+    /// area the first 24 frames), playing in timecode, and narrow, where the scrubber goes below.
+    @available(iOS, deprecated: 26, message: "Renders in a scene-less window")
+    @Test func transport() throws {
+        let paused = try #require(CraftTransport.preview)
+        let playing = try #require(CraftTransport(id: "transport", position: 1800, duration: 3600, rate: 29.97, format: .timecode, playing: true, range: 900..<2700))
+        for v in Self.variants.prefix(2) {
+            let view = VStack(spacing: 16) {
+                CraftTransportView(transport: paused, panel: "timeline", send: { _ in })
+                CraftTransportView(transport: playing, panel: "timeline", send: { _ in })
+                CraftTransportView(transport: paused, panel: "timeline", send: { _ in }).frame(width: 320)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(white: 0.5))
+            let png = try Self.render(view, style: v.style, size: CGSize(width: 680, height: 300))
+            try Self.check(png, "transport-\(v.name)-\(Self.runtime)")
+        }
+    }
+
     /// The comparison must catch a one-value change: the Layers panel with Opacity at 50 % instead
     /// of 80 %, or with one row renamed (text alone, a few hundred pixels), is not its reference.
     @available(iOS, deprecated: 26, message: "Renders in a scene-less window")

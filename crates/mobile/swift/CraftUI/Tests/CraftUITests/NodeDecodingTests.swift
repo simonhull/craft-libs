@@ -29,7 +29,7 @@ enum JSONValue: Decodable, Equatable {
     @Test func everyCatalogueExampleDecodes() throws {
         let catalogue = try Self.catalogue()
         #expect(catalogue.version == 1)
-        #expect(catalogue.primitives.map(\.name) == ["number", "toggle", "choice", "section", "item_list", "tool_palette"])
+        #expect(catalogue.primitives.map(\.name) == ["number", "toggle", "choice", "section", "item_list", "tool_palette", "transport"])
         for entry in catalogue.primitives {
             if case .unknown = entry.example { Issue.record("\(entry.name) decoded as unknown") }
         }
@@ -43,6 +43,7 @@ enum JSONValue: Decodable, Equatable {
             "choice": CraftEdit(panel: "layers", control: "blend", phase: .commit, gesture: 9, value: .choice("multiply")),
             "item_list": CraftEdit(panel: "layers", control: "layers", phase: .commit, gesture: 10, value: .move(row: 1, target: 2, position: .above)),
             "tool_palette": CraftEdit(panel: "tools", control: "palette", phase: .commit, gesture: 11, value: .choice("pencil")),
+            "transport": CraftEdit(panel: "timeline", control: "transport", phase: .change, gesture: 12, value: .seek(frame: 12)),
         ]
         var checked = 0
         for entry in try Self.catalogue().primitives {

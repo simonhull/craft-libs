@@ -21,6 +21,10 @@ public struct CraftEdit: Encodable, Equatable, Sendable {
         case action(row: UInt64, action: String)
         /// One of the list's own actions (``CraftItemAction``, in its footer) was chosen.
         case listAction(action: String)
+        /// A transport's scrubber moved the playhead to `frame` (counted from 0).
+        case seek(frame: UInt64)
+        /// One of a transport's buttons (always `commit`).
+        case transport(CraftTransportAction)
     }
 
     public let panel: String
@@ -36,7 +40,7 @@ public struct CraftEdit: Encodable, Equatable, Sendable {
 
     private enum Key: String, CodingKey { case action, panel, control, phase, gesture, value }
     private enum ValueKey: String, CodingKey { case kind, value }
-    private enum RowKey: String, CodingKey { case row, mode, visible, name, target, position, action }
+    private enum RowKey: String, CodingKey { case row, mode, visible, name, target, position, action, frame }
 
     public func encode(to encoder: any Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
@@ -86,6 +90,13 @@ public struct CraftEdit: Encodable, Equatable, Sendable {
             try v.encode("list_action", forKey: .kind)
             var r = v.nestedContainer(keyedBy: RowKey.self, forKey: .value)
             try r.encode(action, forKey: .action)
+        case let .seek(frame):
+            try v.encode("seek", forKey: .kind)
+            var r = v.nestedContainer(keyedBy: RowKey.self, forKey: .value)
+            try r.encode(frame, forKey: .frame)
+        case let .transport(action):
+            try v.encode("transport", forKey: .kind)
+            try v.encode(action, forKey: .value)
         }
     }
 }

@@ -84,6 +84,10 @@ public struct CraftShell: View {
             shown.formUnion(bridge.panels.filter { $0.role == .rail }.map(\.id))
             if let railOptions { shown.insert(railOptions) }
         }
+        if nativePanels {
+            // The transport bar is on screen while the app offers it (hidden only while typing).
+            shown.formUnion(bridge.panels.filter { $0.role == .transport }.map(\.id))
+        }
         return shown
     }
 
@@ -94,12 +98,19 @@ public struct CraftShell: View {
             .ignoresSafeArea(.container, edges: .bottom)
             .background(Color.black)
             .overlay(alignment: .bottom) {
-                // While typing, the keyboard is the toolbar.
-                if chrome || nativePanels || menus, !bridge.keyboardVisible { toolbar.padding(.bottom, 20).transition(.opacity) }
+                // While typing, the keyboard is the toolbar. The transport bar floats just above it.
+                if chrome || nativePanels || menus, !bridge.keyboardVisible {
+                    VStack(spacing: 12) {
+                        if nativePanels { CraftShellTransport(bridge: bridge) }
+                        toolbar
+                    }
+                    .padding(.bottom, 20)
+                    .transition(.opacity)
+                }
             }
             .overlay {
                 // A toast at the top, progress above the toolbar; the space between takes no touches.
-                if status { CraftShellStatus(bridge: bridge) }
+                if status { CraftShellStatus(bridge: bridge, transportBar: nativePanels) }
             }
             .overlay(alignment: .leading) {
                 if rail { CraftShellRail(bridge: bridge, options: $railOptions)
@@ -196,6 +207,8 @@ public struct CraftShell: View {
             .statusBarHidden()
             // Craft apps are dark pro tools; the native chrome matches the canvas.
             .preferredColorScheme(.dark)
+            // Transports anywhere in the shell (the bar, or one in a panel) show live positions.
+            .environment(\.craftLiveValues, bridge.live)
             // Development aid (see CraftDevelopment): CRAFT_DEMO_SHOW_ITEMS=1 opens the inspector.
             .onAppear {
                 if ProcessInfo.processInfo.environment["CRAFT_DEMO_SHOW_ITEMS"] == "1" {
@@ -319,9 +332,13 @@ struct CraftShellMenus: View {
 /// The app's status over the canvas. Only this view reads it, so a change redraws it alone.
 struct CraftShellStatus: View {
     let bridge: CraftBridge
+    /// Whether the shell shows the app's transport panel as a bar above the toolbar.
+    let transportBar: Bool
 
     var body: some View {
-        CraftStatusView(status: bridge.status, command: bridge.command)
+        // Progress clears the transport bar too while the app offers one (a 52 pt bar, a 12 pt gap).
+        let raised = transportBar && bridge.panels.contains { $0.role == .transport }
+        CraftStatusView(status: bridge.status, bottomInset: raised ? 154 : 90, command: bridge.command)
     }
 }
 

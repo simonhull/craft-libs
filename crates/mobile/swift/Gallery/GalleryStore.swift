@@ -58,6 +58,13 @@ final class GalleryStore {
     /// Each drag in progress, by gesture: its control and the value it started from, which a
     /// cancelled drag puts back (and nothing else: other controls may have changed meanwhile).
     private var drags: [UInt64: (control: String, from: CraftEdit.Value)] = [:]
+    /// The transport's playhead while it plays, as the app sends it (wire kind 17): the panels
+    /// aren't described again each frame.
+    let live = CraftLiveValues()
+    /// The panel the floating transport bar names in its edits, as an app's transport panel would.
+    static let timeline = "timeline"
+    /// Moves the playhead while the transport plays.
+    private var playback: Task<Void, Never>?
 
     init() {
         do {
@@ -99,6 +106,9 @@ final class GalleryStore {
         if let json = try? encoder.encode(edit) {
             logLine(String(decoding: json, as: UTF8.self))
         }
+        // An edit describes the panels again: the playhead's live position goes into them.
+        foldLivePositions()
+        defer { playIfPlaying() }
         switch edit.phase {
         case .begin:
             if let from = entries.lazy.compactMap({ $0.example.value(of: edit.control) }).first {
@@ -115,6 +125,49 @@ final class GalleryStore {
     private func apply(_ value: CraftEdit.Value, to control: String) {
         for index in entries.indices {
             entries[index].example = entries[index].example.applying(value, to: control)
+        }
+    }
+
+    /// The first transport among the examples, as its panels show it.
+    var transport: CraftTransport? {
+        entries.lazy.compactMap { if case let .transport(t) = $0.example { t } else { nil } }.first
+    }
+
+    /// The live position, if one, into the described transport; then no live positions.
+    private func foldLivePositions() {
+        guard let t = transport, let position = Self.panels(showing: t).lazy.compactMap({ self.live.position(panel: $0, control: t.id) }).first else { return }
+        apply(.seek(frame: position), to: t.id)
+        live.described()
+    }
+
+    /// The panels a transport is in: its own page's, Everything, and the floating bar's.
+    private static func panels(showing transport: CraftTransport) -> [String] {
+        ["transport", everything, timeline]
+    }
+
+    /// Plays the transport while it says it's playing, as an app would with `Playback`: the frame
+    /// follows the clock (not the timer's ticks), wrapping within the work area or else all of it,
+    /// and only a changed frame is sent, as a live position.
+    private func playIfPlaying() {
+        // Every edit starts it again from where the edit left the playhead (a seek while playing).
+        playback?.cancel()
+        playback = nil
+        guard let t = transport, t.playing else { return }
+        let span = t.range ?? 0..<t.duration
+        let from = span.contains(t.position) ? t.position : span.lowerBound
+        let start = ContinuousClock.now
+        playback = Task { [weak self] in
+            var shown = from
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1 / t.rate))
+                let elapsed = start.duration(to: .now) / .seconds(1)
+                let frame = span.lowerBound + (from - span.lowerBound + UInt64(elapsed * t.rate)) % UInt64(span.count)
+                guard let self, !Task.isCancelled else { return }
+                if frame != shown {
+                    shown = frame
+                    live.apply(Self.panels(showing: t).map { CraftLiveValue(panel: $0, control: t.id, position: frame) })
+                }
+            }
         }
     }
 
@@ -158,6 +211,7 @@ extension CraftNode {
         case let .toggle(id, _, value, _) where id == control: .toggle(value)
         case let .choice(id, _, value, _, _) where id == control: .choice(value)
         case let .toolPalette(palette) where palette.id == control: .choice(palette.selected)
+        case let .transport(transport) where transport.id == control: .seek(frame: transport.position)
         default: nil
         }
     }
@@ -178,6 +232,10 @@ extension CraftNode {
             return .choice(id: id, label: label, value: new, options: options, enabled: enabled)
         case let (.toolPalette(palette), .choice(tool)) where palette.id == control && palette.slots.contains { $0.tools.contains { $0.id == tool } }:
             return .toolPalette(palette.selecting(tool))
+        case let (.transport(transport), .seek(frame)) where transport.id == control:
+            return .transport(transport.with(position: frame))
+        case let (.transport(transport), .transport(action)) where transport.id == control:
+            return .transport(transport.applying(action))
         case let (.itemList(id, rows, reorderable, actions), _) where id == control:
             return .itemList(id: id, rows: rows.applying(value, reorderable: reorderable), reorderable: reorderable, actions: actions)
         default:
@@ -210,9 +268,26 @@ extension [CraftRow] {
             guard let at = rows.firstIndex(where: { $0.id == target }) else { return self }
             rows.insert(moving, at: position == .above ? at : at + 1)
             return rows
-        case .number, .toggle, .choice, .action, .listAction:
+        case .number, .toggle, .choice, .action, .listAction, .seek, .transport:
             // An action means what the app says it does; the Gallery only logs it (Edits Sent).
             return self
+        }
+    }
+}
+
+extension CraftTransport {
+    /// A button's action, as PhotoCraft plays its timeline: Stop pauses, and rewinds to the start
+    /// of the work area if already paused; stepping pauses and stops at the ends.
+    func applying(_ action: CraftTransportAction) -> CraftTransport {
+        let start = range?.lowerBound ?? 0
+        return switch action {
+        case .play: with(playing: true)
+        case .pause: with(playing: false)
+        case .stop: playing ? with(playing: false) : with(position: start)
+        case .stepBack: with(position: position == 0 ? 0 : position - 1, playing: false)
+        case .stepForward: with(position: position + 1, playing: false)
+        case .toStart: with(position: 0)
+        case .toEnd: with(position: duration - 1)
         }
     }
 }

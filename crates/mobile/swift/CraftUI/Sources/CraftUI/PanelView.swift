@@ -38,6 +38,7 @@ struct CraftNodeView: View {
     let node: CraftNode
     let panel: String
     let send: @MainActor (CraftEdit) -> Void
+    @Environment(\.craftDescriptions) private var descriptions
 
     var body: some View {
         switch node {
@@ -68,6 +69,9 @@ struct CraftNodeView: View {
                 .padding(.vertical, 4)
             }
             .scrollBounceBehavior(.basedOnSize)
+        case let .transport(transport):
+            // In a panel, plain; the floating bar is the shell's (`transport` role).
+            CraftTransportView(transport: transport, panel: panel, descriptions: descriptions, style: .inline, send: send)
         case let .unknown(type):
             Label("Needs a newer CraftKit: \(type)", systemImage: "questionmark.square.dashed")
                 .foregroundStyle(.secondary)

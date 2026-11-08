@@ -37,8 +37,9 @@ struct CraftPanelTools: View {
                     .popover(isPresented: Binding(get: { popover == info.id }, set: { if !$0, popover == info.id { popover = nil } })) {
                         CraftPopover { CraftPanelHost(bridge: bridge, id: info.id) }
                     }
-            case .rail:
-                // The rail is beside the canvas (`CraftShellRail`), not a toolbar button.
+            case .rail, .transport:
+                // The rail is beside the canvas (`CraftShellRail`), the transport above the toolbar
+                // (`CraftShellTransport`): neither is a toolbar button.
                 EmptyView()
             }
         }
@@ -124,8 +125,8 @@ struct CraftPanelOpener: View {
                         inspectorShown = true
                     case .tool:
                         popover = info.id
-                    case .rail:
-                        // Always on screen while the shell shows the rail.
+                    case .rail, .transport:
+                        // Always on screen while the shell shows them.
                         break
                     }
                 }
@@ -153,6 +154,34 @@ struct CraftShellRail: View {
     /// The rail panel's first tool palette.
     static func palette(_ panel: CraftPanel?) -> CraftToolPalette? {
         panel?.nodes.lazy.compactMap { if case let .toolPalette(palette) = $0 { palette } else { nil } }.first
+    }
+}
+
+/// The app's transport panel as a floating bar above the toolbar, while it offers one and has
+/// described it. Only this view reads the transport's description, so a new one redraws it alone;
+/// its live positions (wire kind 17, at most once a frame while it plays) redraw only the bar
+/// inside it (``CraftTransportView``), not this view.
+struct CraftShellTransport: View {
+    let bridge: CraftBridge
+
+    var body: some View {
+        if let info = bridge.panels.first(where: { $0.role == .transport }), let transport = Self.transport(bridge.open[info.id]?.nodes ?? []) {
+            CraftTransportView(transport: transport, panel: info.id, descriptions: bridge.descriptions, send: bridge.send)
+                .padding(.horizontal, 24)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+    }
+
+    /// The first transport among `nodes`, inside sections too.
+    static func transport(_ nodes: [CraftNode]) -> CraftTransport? {
+        for node in nodes {
+            switch node {
+            case let .transport(transport): return transport
+            case let .section(_, _, _, children): if let found = transport(children) { return found }
+            default: continue
+            }
+        }
+        return nil
     }
 }
 

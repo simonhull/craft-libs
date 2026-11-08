@@ -34,6 +34,8 @@ struct GalleryApp: App {
             } detail: {
                 detail
             }
+            // The transport's playhead moves by live positions while it plays, in every panel.
+            .environment(\.craftLiveValues, store.live)
         }
     }
 
@@ -51,6 +53,9 @@ struct GalleryApp: App {
         } else if selection == "tool_palette", let entry = store.entries.first(where: { $0.id == selection }) {
             GalleryDetail(title: entry.name, about: entry.about, store: store) { store.panel(for: entry, role: $0) }
                 .overlay(alignment: .leading) { GalleryRail(store: store).padding(.leading, 16) }
+        } else if selection == "transport", let entry = store.entries.first(where: { $0.id == selection }) {
+            GalleryDetail(title: entry.name, about: entry.about, store: store) { store.panel(for: entry, role: $0) }
+                .overlay(alignment: .bottom) { GalleryTransport(store: store).padding(.bottom, 20) }
         } else if let entry = store.entries.first(where: { $0.id == selection }) {
             GalleryDetail(title: entry.name, about: entry.about, store: store) { store.panel(for: entry, role: $0) }
         } else {
@@ -233,6 +238,19 @@ struct GalleryRail: View {
             ) { id in
                 CraftPanelView(panel: store.optionsPanel(id), send: store.send)
             }
+        }
+    }
+}
+
+/// The catalogue's transport as the shell's floating bar, played by the Gallery: Play runs a timer
+/// that moves the playhead by live positions (wire kind 17), as an app's playback does.
+struct GalleryTransport: View {
+    let store: GalleryStore
+
+    var body: some View {
+        if let transport = store.transport {
+            CraftTransportView(transport: transport, panel: GalleryStore.timeline, send: store.send)
+                .padding(.horizontal, 24)
         }
     }
 }

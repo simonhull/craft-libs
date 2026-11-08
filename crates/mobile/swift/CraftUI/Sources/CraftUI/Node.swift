@@ -3,8 +3,9 @@ import Foundation
 /// A panel the app offers (craft-mobile's `ui::PanelInfo`).
 public struct CraftPanelInfo: Decodable, Equatable, Identifiable, Sendable {
     /// Where a panel shows: `inspector` slides in beside the canvas, `tool` is a popover, `rail` is
-    /// the vertical rail at the canvas's leading edge (its tool palette).
-    public enum Role: String, Decodable, Sendable { case inspector, tool, rail }
+    /// the vertical rail at the canvas's leading edge (its tool palette), `transport` a floating bar
+    /// above the bottom toolbar (its transport).
+    public enum Role: String, Decodable, Sendable { case inspector, tool, rail, transport }
 
     public let id: String
     public let title: String
@@ -163,6 +164,7 @@ public indirect enum CraftNode: Decodable, Equatable, Sendable {
     /// `actions` are the list's own (its footer's buttons), not a row's.
     case itemList(id: String, rows: [CraftRow], reorderable: Bool, actions: [CraftItemAction] = [])
     case toolPalette(CraftToolPalette)
+    case transport(CraftTransport)
     /// A type this kit doesn't know (the app is newer).
     case unknown(type: String)
     /// A known type that didn't decode (the app sent it wrong).
@@ -223,13 +225,15 @@ public indirect enum CraftNode: Decodable, Equatable, Sendable {
                 actions: ((try? c.decodeIfPresent([Skippable<CraftItemAction>].self, forKey: .actions)) ?? []).compactMap(\.value))
         case "tool_palette":
             self = try .toolPalette(CraftToolPalette(from: decoder))
+        case "transport":
+            self = try .transport(CraftTransport(from: decoder))
         default:
             self = .unknown(type: type)
         }
     }
 
     /// The `type`s this kit draws.
-    static let knownTypes: Set = ["section", "number", "toggle", "choice", "item_list", "tool_palette"]
+    static let knownTypes: Set = ["section", "number", "toggle", "choice", "item_list", "tool_palette", "transport"]
 
     /// A list of nodes, each decoded on its own: one that fails becomes `.malformed` (a known type)
     /// or `.unknown` (with its `type`, empty if it has none) instead of failing the list.
@@ -261,6 +265,8 @@ public indirect enum CraftNode: Decodable, Equatable, Sendable {
             id
         case let .toolPalette(palette):
             palette.id
+        case let .transport(transport):
+            transport.id
         case let .unknown(type):
             "unknown-\(type)"
         case let .malformed(type):

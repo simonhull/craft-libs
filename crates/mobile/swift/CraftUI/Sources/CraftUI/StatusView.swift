@@ -70,6 +70,9 @@ public struct CraftStatus: Decodable, Equatable, Sendable {
 public struct CraftStatusView: View {
     let status: CraftStatus
     let command: @MainActor (String) -> Void
+    /// How far above the bottom edge the progress sits: clear of the shell's toolbar (and its
+    /// transport bar, when it shows one).
+    let bottomInset: CGFloat
     /// The message on screen; the same message arriving again doesn't show again.
     @State private var toast: CraftStatus.Message?
     @State private var dismissed: Identity?
@@ -82,8 +85,8 @@ public struct CraftStatusView: View {
         case unnumbered(String, CraftStatus.Message.Tone)
     }
 
-    public init(status: CraftStatus, command: @escaping @MainActor (String) -> Void) {
-        (self.status, self.command) = (status, command)
+    public init(status: CraftStatus, bottomInset: CGFloat = 90, command: @escaping @MainActor (String) -> Void) {
+        (self.status, self.bottomInset, self.command) = (status, bottomInset, command)
     }
 
     public var body: some View {
@@ -105,7 +108,7 @@ public struct CraftStatusView: View {
             if let progress = status.progress {
                 CraftProgressCapsule(progress: progress, command: command)
                     // Above the shell's toolbar.
-                    .padding(.bottom, 90)
+                    .padding(.bottom, bottomInset)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
