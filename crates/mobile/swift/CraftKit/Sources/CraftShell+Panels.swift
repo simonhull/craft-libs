@@ -158,16 +158,22 @@ struct CraftShellRail: View {
 }
 
 /// The app's transport panel as a floating bar above the toolbar, while it offers one and has
-/// described it. Only this view reads the transport's description, so a new one redraws it alone;
-/// its live positions (wire kind 17, at most once a frame while it plays) redraw only the bar
-/// inside it (``CraftTransportView``), not this view.
+/// described it. It reads the open panels' descriptions, so any description (wire kind 13, of any
+/// panel, at most once a frame) redraws it, and the bar when its transport changed. Its live
+/// positions (wire kind 17, once a frame while it plays) redraw neither: only the scrubber and the
+/// time inside the bar read them (``CraftTransportView``).
+///
+/// Reports the bar's height while it's on screen, 0 once it's gone, so progress clears it.
 struct CraftShellTransport: View {
     let bridge: CraftBridge
+    @Binding var height: CGFloat
 
     var body: some View {
         if let info = bridge.panels.first(where: { $0.role == .transport }), let transport = Self.transport(bridge.open[info.id]?.nodes ?? []) {
             CraftTransportView(transport: transport, panel: info.id, descriptions: bridge.descriptions, send: bridge.send)
                 .padding(.horizontal, 24)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
+                .onDisappear { height = 0 }
                 .transition(.move(edge: .bottom).combined(with: .opacity))
         }
     }

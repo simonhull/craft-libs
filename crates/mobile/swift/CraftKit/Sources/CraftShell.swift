@@ -30,6 +30,9 @@ public struct CraftShell: View {
     /// The Tool panel the rail opened for the selected tool's options.
     @State private var railOptions: String?
     @State private var photos: [PhotosPickerItem] = []
+    /// The transport bar's height while it's on screen (it stacks to two rows when narrow); 0 while
+    /// it isn't.
+    @State private var transportHeight: CGFloat = 0
 
     /// - Parameters:
     ///   - documentTypes: what the app opens, its own documents first. Any image type among them
@@ -101,7 +104,7 @@ public struct CraftShell: View {
                 // While typing, the keyboard is the toolbar. The transport bar floats just above it.
                 if chrome || nativePanels || menus, !bridge.keyboardVisible {
                     VStack(spacing: 12) {
-                        if nativePanels { CraftShellTransport(bridge: bridge) }
+                        if nativePanels { CraftShellTransport(bridge: bridge, height: $transportHeight) }
                         toolbar
                     }
                     .padding(.bottom, 20)
@@ -110,7 +113,7 @@ public struct CraftShell: View {
             }
             .overlay {
                 // A toast at the top, progress above the toolbar; the space between takes no touches.
-                if status { CraftShellStatus(bridge: bridge, transportBar: nativePanels) }
+                if status { CraftShellStatus(bridge: bridge, transportHeight: transportHeight) }
             }
             .overlay(alignment: .leading) {
                 if rail { CraftShellRail(bridge: bridge, options: $railOptions)
@@ -332,13 +335,17 @@ struct CraftShellMenus: View {
 /// The app's status over the canvas. Only this view reads it, so a change redraws it alone.
 struct CraftShellStatus: View {
     let bridge: CraftBridge
-    /// Whether the shell shows the app's transport panel as a bar above the toolbar.
-    let transportBar: Bool
+    /// The transport bar's height above the toolbar, as measured; 0 while it isn't on screen.
+    let transportHeight: CGFloat
 
     var body: some View {
-        // Progress clears the transport bar too while the app offers one (a 52 pt bar, a 12 pt gap).
-        let raised = transportBar && bridge.panels.contains { $0.role == .transport }
-        CraftStatusView(status: bridge.status, bottomInset: raised ? 154 : 90, command: bridge.command)
+        CraftStatusView(status: bridge.status, bottomInset: Self.bottomInset(transportHeight: transportHeight), command: bridge.command)
+    }
+
+    /// Where progress sits above the screen's bottom: clear of the toolbar, and of the transport
+    /// bar and the gap above it while that's on screen, however many rows it takes.
+    static func bottomInset(transportHeight: CGFloat) -> CGFloat {
+        transportHeight > 0 ? 90 + transportHeight + 12 : 90
     }
 }
 
