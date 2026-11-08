@@ -57,6 +57,15 @@ import Testing
         #expect(CraftRailView<EmptyView>.optionsNow(for: "pencil", in: described) == .panel("pencil"))
     }
 
+    /// A rail too tall to fit scrolls to the selected tool, wherever its slot holds it.
+    @Test func theSelectedToolsSlotIsFoundInItsFlyout() {
+        let palette = CraftToolPalette.preview  // Move; Brush + Pencil; Smudge
+        #expect(CraftRailView<EmptyView>.slotIndex(of: "move", in: palette) == 0)
+        #expect(CraftRailView<EmptyView>.slotIndex(of: "pencil", in: palette) == 1)
+        #expect(CraftRailView<EmptyView>.slotIndex(of: "smudge", in: palette) == 2)
+        #expect(CraftRailView<EmptyView>.slotIndex(of: "gone", in: palette) == nil)
+    }
+
     @Test func aToolsHintSaysItsShortcutAndItsFlyout() throws {
         let brush = try #require(CraftToolPalette.preview.slots[safe: 1]?.tools.first)
         #expect(CraftRailSlot.hint(brush, more: true) == "Shortcut B. More tools in the actions.")

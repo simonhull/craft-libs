@@ -181,9 +181,18 @@ public struct CraftRailView<Options: View>: View {
     public var body: some View {
         let stack = axis == .vertical ? AnyLayout(VStackLayout(spacing: 4)) : AnyLayout(HStackLayout(spacing: 4))
         stack {
-            ForEach(Array(palette.slots.enumerated()), id: \.offset) { _, slot in
-                if let tool = slot.shown(selected: palette.selected) {
-                    CraftRailSlot(slot: slot, tool: tool, selected: palette.selected, tap: tap)
+            // The tools scroll when they don't fit (an iPad in landscape); the options button stays.
+            ViewThatFits(in: axis == .vertical ? .vertical : .horizontal) {
+                tools(stack)
+                ScrollViewReader { proxy in
+                    ScrollView(axis == .vertical ? .vertical : .horizontal) { tools(stack) }
+                        .scrollIndicators(.hidden)
+                        .scrollEdgeEffectStyle(.soft, for: axis == .vertical ? .vertical : .horizontal)
+                        .onChange(of: palette.selected, initial: true) { _, _ in
+                            // A tool picked by its shortcut scrolls into view.
+                            guard let slot = Self.slotIndex(of: palette.selected, in: palette) else { return }
+                            withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(slot) }
+                        }
                 }
             }
             if let route = palette.optionsRoute {
@@ -208,6 +217,21 @@ public struct CraftRailView<Options: View>: View {
             pendingOptions = nil
             palette.optionsRoute.map(open)
         }
+    }
+
+    private func tools(_ stack: AnyLayout) -> some View {
+        stack {
+            ForEach(Array(palette.slots.enumerated()), id: \.offset) { index, slot in
+                if let tool = slot.shown(selected: palette.selected) {
+                    CraftRailSlot(slot: slot, tool: tool, selected: palette.selected, tap: tap).id(index)
+                }
+            }
+        }
+    }
+
+    /// Where `tool` sits on the rail: the index of the slot that holds it.
+    nonisolated static func slotIndex(of tool: String, in palette: CraftToolPalette) -> Int? {
+        palette.slots.firstIndex { $0.tools.contains { $0.id == tool } }
     }
 
     private func tap(_ tool: String) {

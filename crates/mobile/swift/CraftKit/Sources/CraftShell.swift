@@ -102,7 +102,10 @@ public struct CraftShell: View {
                 if status { CraftShellStatus(bridge: bridge) }
             }
             .overlay(alignment: .leading) {
-                if rail { CraftShellRail(bridge: bridge, options: $railOptions).padding(.leading, 12) }
+                if rail { CraftShellRail(bridge: bridge, options: $railOptions)
+                        // Clear of the screen's edges and the home indicator; taller than that, it scrolls.
+                        .padding(.leading, 12)
+                        .padding(.vertical, 20) }
             }
             .animation(.easeOut(duration: 0.2), value: bridge.keyboardVisible)
             .inspector(isPresented: Binding(get: { inspectorShown && isAvailable(inspector) }, set: { inspectorShown = $0 })) {
