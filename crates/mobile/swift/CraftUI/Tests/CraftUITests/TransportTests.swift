@@ -212,6 +212,21 @@ import Testing
         #expect(scrub.shown(app: 5) == 5, "then the app's")
     }
 
+    /// The view's rule: once a drag ends, anything new from the app (a description, changed or not,
+    /// or another position) settles it; the same word again doesn't.
+    @Test func whatTheAppSaysSettlesAnEndedDrag() throws {
+        let before = CraftScrub.Word(descriptions: 4, position: 11)
+        var scrub = CraftScrub()
+        _ = scrub.begin(at: 2, from: 11)
+        #expect(!scrub.settles(after: before, now: .init(descriptions: 4, position: 2)), "mid-drag the finger's frame shows: nothing to settle")
+        _ = scrub.commit(at: 6)
+        #expect(!scrub.settles(after: before, now: before), "nothing new")
+        #expect(scrub.settles(after: before, now: .init(descriptions: 5, position: 11)), "a description, the position unchanged (a refused seek)")
+        #expect(scrub.settles(after: before, now: .init(descriptions: 4, position: 6)), "a live position")
+        scrub.settled()
+        #expect(!scrub.settles(after: before, now: .init(descriptions: 5, position: 6)), "already settled")
+    }
+
     /// A tap is a begin and a commit, each its own gesture number from the next tap's.
     @Test func aTapSeeks() throws {
         var scrub = CraftScrub()
@@ -230,7 +245,8 @@ import Testing
         let cancel = try #require(cancelled)
         #expect(cancel == CraftScrub.Step(gesture: begin.gesture, phase: .cancel, frame: 11))
         #expect(scrub.cancel() == nil)
-        #expect(scrub.shown(app: 3) == 11)
+        #expect(scrub.shown(app: 3) == 3, "the app's frame: it puts the playhead back, or doesn't, and says where")
+        #expect(scrub.shown(app: 11) == 11)
     }
 
     @Test func crossingTheWorkAreasEdges() {
@@ -265,6 +281,23 @@ import Testing
         #expect(live.positions == [.init(panel: "timeline", control: "transport"): 7])
         #expect(throws: DecodingError.self) { try live.apply(json: Data(#"{"panel":"timeline"}"#.utf8)) }
         #expect(live.positions == [.init(panel: "timeline", control: "transport"): 7])
+    }
+
+    /// Where the transport view puts the app's playhead: the live position for this transport, if
+    /// one came since the description, kept on a frame.
+    @Test func theAppsPlayheadIsTheLivePositionElseTheDescribedOne() throws {
+        let transport = try #require(CraftTransport(id: "transport", position: 4, duration: 30, rate: 24))
+        let live = CraftLiveValues()
+        #expect(transport.appPosition(panel: "timeline", live: nil) == 4, "no live values in the environment")
+        #expect(transport.appPosition(panel: "timeline", live: live) == 4, "none yet")
+        live.apply([CraftLiveValue(panel: "other", control: "transport", position: 9), CraftLiveValue(panel: "timeline", control: "nested", position: 8)])
+        #expect(transport.appPosition(panel: "timeline", live: live) == 4, "another transport's")
+        live.apply([CraftLiveValue(panel: "timeline", control: "transport", position: 12)])
+        #expect(transport.appPosition(panel: "timeline", live: live) == 12)
+        live.apply([CraftLiveValue(panel: "timeline", control: "transport", position: 99)])
+        #expect(transport.appPosition(panel: "timeline", live: live) == 29, "past the end: the last frame")
+        live.described()
+        #expect(transport.appPosition(panel: "timeline", live: live) == 4, "described again")
     }
 
     /// Observers (the transport views) hear of a position only when one changed.

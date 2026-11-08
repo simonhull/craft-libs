@@ -104,6 +104,13 @@ extension CraftTransport {
     /// the label's width steady while it plays.
     var widestLabel: String { label(at: duration - 1) }
 
+    /// Where the app says the playhead is: the live position of this transport in `panel`, if one
+    /// arrived since the description, else the described one; on a frame either way.
+    @MainActor
+    func appPosition(panel: String, live: CraftLiveValues?) -> UInt64 {
+        min(live?.position(panel: panel, control: id) ?? position, duration - 1)
+    }
+
     /// What VoiceOver says for `frame`: "Frame 12 of 30", or the timecode.
     func spokenLabel(at frame: UInt64) -> String {
         switch format {
@@ -165,15 +172,24 @@ extension CraftTransport {
 /// finger moving to another frame sends `change` (not every point it moves), and lifting it
 /// `commit`s where it is; a cancelled drag sends `cancel` with the frame from before it.
 ///
-/// While the drag runs, the scrubber shows the finger's frame, not the app's echoes. After it ends,
-/// it shows the frame it sent last until the app says where the playhead is (a description, or a
-/// live position): the app's frame wins then, clamped or refused.
+/// While the drag runs, the scrubber shows the finger's frame, not the app's echoes. After it is
+/// committed, it shows the frame it sent last until the app says where the playhead is (a
+/// description, or a live position): the app's frame wins then, clamped or refused. After it is
+/// cancelled, it shows the app's frame at once: the app puts the playhead back (or doesn't, a
+/// dialog being up) and says where.
 struct CraftScrub: Equatable, Sendable {
     /// One edit's worth of a drag.
     struct Step: Equatable, Sendable {
         let gesture: UInt64
         let phase: CraftEdit.Phase
         let frame: UInt64
+    }
+
+    /// What the app says about the playhead: how many descriptions it has sent (changed or not),
+    /// and where it puts the playhead (``CraftTransport/appPosition(panel:live:)``).
+    struct Word: Equatable, Sendable {
+        let descriptions: UInt64
+        let position: UInt64
     }
 
     private struct Drag: Equatable, Sendable {
@@ -215,14 +231,23 @@ struct CraftScrub: Equatable, Sendable {
         return Step(gesture: current.gesture, phase: .commit, frame: frame)
     }
 
-    /// The drag was abandoned (or its view went away): the frame from before it; `nil` if none was running.
+    /// The drag was abandoned (or its view went away): the frame from before it; `nil` if none was
+    /// running. The app's frame shows from now on.
     mutating func cancel() -> Step? {
         guard let current = drag.take() else { return nil }
-        settling = current.from
+        settling = nil
         return Step(gesture: current.gesture, phase: .cancel, frame: current.from)
     }
 
-    /// The app said where the playhead is (a description, changed or not, or a live position).
+    /// Whether the app saying `new`, having said `old`, settles a drag that ended: it said
+    /// something new (a description, changed or not, or another position) while the frame the
+    /// drag ended on shows. Asked before ``settled()``, so a view writes its state only when it
+    /// changes, not with every live position.
+    func settles(after old: Word, now new: Word) -> Bool {
+        settling != nil && old != new
+    }
+
+    /// The app said where the playhead is: its frame shows from now on.
     mutating func settled() {
         settling = nil
     }

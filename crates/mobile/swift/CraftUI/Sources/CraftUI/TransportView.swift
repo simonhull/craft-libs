@@ -15,7 +15,10 @@ extension EnvironmentValues {
 ///   finger's frame, not the app's. A light tick marks crossing an edge of the work area. VoiceOver
 ///   adjusts it a frame at a time (each one `commit`).
 /// - The playhead shows the live position (``SwiftUICore/EnvironmentValues/craftLiveValues``) when
-///   one arrived since the last description, so a playing transport redraws this view alone.
+///   one arrived since the last description. Only the scrubber and the time read it
+///   (`CraftTransportPlayhead`), so a playing transport redraws those and not its buttons or the
+///   layouts around them. VoiceOver hears the scrubber's value as one that changes often while it
+///   plays.
 ///
 /// Laid out in a row when it fits, else the buttons and time above the scrubber.
 public struct CraftTransportView: View {
@@ -31,7 +34,6 @@ public struct CraftTransportView: View {
     @State private var scrub = CraftScrub()
     /// Counts crossings of the work area's edges while scrubbing; each one is a haptic tick.
     @State private var edgeTicks = 0
-    @Environment(\.craftLiveValues) private var live
 
     /// - Parameters:
     ///   - transport: as the app described it.
@@ -46,17 +48,11 @@ public struct CraftTransportView: View {
         (self.transport, self.panel, self.descriptions, self.style, self.send) = (transport, panel, descriptions, style, send)
     }
 
-    /// Where the app says the playhead is: the live position if one came since the description.
-    private var appPosition: UInt64 {
-        min(live?.position(panel: panel, control: transport.id) ?? transport.position, transport.duration - 1)
-    }
-
     public var body: some View {
-        let shown = scrub.shown(app: appPosition)
         Group {
             switch style {
             case .bar:
-                content(shown)
+                content
                     .padding(.horizontal, 10)
                     .padding(.vertical, 4)
                     .frame(maxWidth: 720)
@@ -64,33 +60,40 @@ public struct CraftTransportView: View {
                     // A bar: past this, its controls' labels show in the large content viewer.
                     .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
             case .inline:
-                content(shown)
+                content
             }
         }
         .disabled(!transport.enabled)
         .sensoryFeedback(.impact(weight: .light, intensity: 0.7), trigger: edgeTicks)
-        .onChange(of: descriptions) { scrub.settled() }
-        .onChange(of: appPosition) { scrub.settled() }
         // Re-described without this transport, or closed, mid-scrub: put the playhead back.
-        .onDisappear { if let step = scrub.cancel() { emit(step) } }
+        .onDisappear {
+            if let step = scrub.cancel() {
+                send(CraftEdit(panel: panel, control: transport.id, phase: step.phase, gesture: step.gesture, value: .seek(frame: step.frame)))
+            }
+        }
     }
 
-    private func content(_ shown: UInt64) -> some View {
+    private var content: some View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 6) {
                 buttons
-                track(shown).frame(minWidth: 180)
-                time(shown).padding(.trailing, 8)
+                playhead(.track).frame(minWidth: 180)
+                playhead(.time).padding(.trailing, 8)
             }
             VStack(spacing: 0) {
                 HStack(spacing: 6) {
                     buttons
                     Spacer(minLength: 8)
-                    time(shown)
+                    playhead(.time)
                 }
-                track(shown)
+                playhead(.track)
             }
         }
+    }
+
+    private func playhead(_ part: CraftTransportPlayhead.Part) -> some View {
+        CraftTransportPlayhead(
+            part: part, transport: transport, panel: panel, descriptions: descriptions, scrub: $scrub, edgeTicks: $edgeTicks, send: send)
     }
 
     private var buttons: some View {
@@ -120,6 +123,38 @@ public struct CraftTransportView: View {
         .accessibilityShowsLargeContentViewer { Label(label, systemImage: symbol) }
         .help(label)
     }
+}
+
+/// The parts of a transport bar that move with the playhead: the scrubber, or the time. The only
+/// views of the bar that read the live positions, so a playing transport redraws these alone.
+///
+/// Each settles the bar's scrub when the app says something new about the playhead; the scrub is
+/// the bar's, so both parts show the same frame.
+struct CraftTransportPlayhead: View {
+    enum Part { case track, time }
+
+    let part: Part
+    let transport: CraftTransport
+    let panel: String
+    let descriptions: UInt64
+    @Binding var scrub: CraftScrub
+    @Binding var edgeTicks: Int
+    let send: @MainActor (CraftEdit) -> Void
+    @Environment(\.craftLiveValues) private var live
+
+    var body: some View {
+        let app = transport.appPosition(panel: panel, live: live)
+        let shown = scrub.shown(app: app)
+        Group {
+            switch part {
+            case .track: track(shown, app: app)
+            case .time: time(shown)
+            }
+        }
+        .onChange(of: CraftScrub.Word(descriptions: descriptions, position: app)) { old, new in
+            if scrub.settles(after: old, now: new) { scrub.settled() }
+        }
+    }
 
     private func time(_ shown: UInt64) -> some View {
         // Sized for the widest time, so the bar doesn't shift as the digits change.
@@ -134,11 +169,11 @@ public struct CraftTransportView: View {
             .accessibilityHidden(true)
     }
 
-    private func track(_ shown: UInt64) -> some View {
+    private func track(_ shown: UInt64, app: UInt64) -> some View {
         CraftTransportTrack(
             shown: shown, duration: transport.duration, range: transport.range, scrubbing: scrub.isScrubbing,
             began: { frame in
-                emit(scrub.begin(at: frame, from: appPosition))
+                emit(scrub.begin(at: frame, from: app))
             },
             moved: { frame in
                 let old = scrub.current
@@ -152,6 +187,8 @@ public struct CraftTransportView: View {
         .accessibilityElement()
         .accessibilityLabel("Playhead")
         .accessibilityValue(transport.spokenLabel(at: shown))
+        // Playing, the value changes every frame: VoiceOver reads it now and then, not each one.
+        .accessibilityAddTraits(transport.playing ? .updatesFrequently : [])
         .accessibilityAdjustableAction { direction in
             switch direction {
             case .increment where shown + 1 < transport.duration: seek(shown + 1)
