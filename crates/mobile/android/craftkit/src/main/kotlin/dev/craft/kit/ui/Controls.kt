@@ -1,26 +1,21 @@
 package dev.craft.kit.ui
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -29,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenu
@@ -48,6 +44,8 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ToggleButton
+import androidx.compose.material3.ToggleButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -66,10 +64,11 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -258,16 +257,17 @@ internal fun CraftToggle(node: Node.Toggle, panel: String, send: (Edit) -> Unit,
 }
 
 /**
- * One of several options: a connected button group for up to four (the chosen one turns round and
- * shows a check), an exposed dropdown menu for more. Picking the current option sends nothing.
+ * One of several options: Material 3's connected button group for up to four (the chosen one
+ * rounds fully and shows a check), an exposed dropdown menu for more. Picking the current option
+ * sends nothing.
  */
 @Composable
 internal fun CraftChoice(node: Node.Choice, panel: String, send: (Edit) -> Unit, modifier: Modifier = Modifier) {
     val pick = { option: String -> if (option != node.value) send(Edit.commit(panel, node.id, EditValue.Choice(option))) }
     if (node.options.size <= MAX_SEGMENTS) {
         Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(node.label, style = labelStyle)
-            ConnectedButtonGroup(node.options, node.value, node.enabled, pick)
+            Text(node.label, style = labelStyle, modifier = Modifier.alpha(if (node.enabled) 1f else DISABLED_ALPHA))
+            ConnectedChoice(node.options, node.value, node.enabled, pick)
         }
     } else {
         ChoiceMenu(node, pick, modifier)
@@ -276,45 +276,36 @@ internal fun CraftChoice(node: Node.Choice, panel: String, send: (Edit) -> Unit,
 
 private const val MAX_SEGMENTS = 4
 
-/**
- * Material 3 Expressive's connected button group, drawn here because this Compose BOM's material3
- * doesn't have it yet: the buttons sit 2 dp apart, round at the group's ends and squarer inside; the
- * chosen one rounds fully and shows a check.
- */
+/** The options as connected toggle buttons, one chosen: a radio group to TalkBack. */
 @Composable
-private fun ConnectedButtonGroup(options: List<ChoiceOption>, value: String, enabled: Boolean, pick: (String) -> Unit) {
-    val colors = MaterialTheme.colorScheme
-    Row(Modifier.fillMaxWidth().selectableGroup(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+private fun ConnectedChoice(options: List<ChoiceOption>, value: String, enabled: Boolean, pick: (String) -> Unit) {
+    Row(Modifier.fillMaxWidth().selectableGroup(), horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween)) {
         options.forEachIndexed { index, option ->
             val selected = option.id == value
-            val inner by animateDpAsState(if (selected) 20.dp else 6.dp, label = "corner")
-            val start = if (index == 0) 20.dp else inner
-            val end = if (index == options.lastIndex) 20.dp else inner
-            Surface(
-                shape = RoundedCornerShape(topStart = start, bottomStart = start, topEnd = end, bottomEnd = end),
-                color = if (selected) colors.secondaryContainer else colors.surfaceContainerHighest,
-                contentColor = if (selected) colors.onSecondaryContainer else colors.onSurfaceVariant,
-                modifier = Modifier
-                    .weight(1f)
-                    .height(40.dp)
-                    .alpha(if (enabled) 1f else 0.38f)
-                    .selectable(selected, enabled = enabled, role = Role.RadioButton) { pick(option.id) },
+            ToggleButton(
+                checked = selected,
+                onCheckedChange = { pick(option.id) },
+                enabled = enabled,
+                shapes = when (index) {
+                    0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
+                    options.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
+                    else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
+                },
+                icon = if (selected) {
+                    { Icon(Icons.Filled.Check, contentDescription = null) }
+                } else {
+                    null
+                },
+                // The unchosen ones a step above a panel's surface, so the group's extent reads in a dark inspector.
+                colors = ToggleButtonDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest),
+                // Narrower than a lone button's, so a check and a word fit a quarter of a panel.
+                contentPadding = PaddingValues(horizontal = 8.dp),
+                modifier = Modifier.weight(1f).semantics {
+                    role = Role.RadioButton
+                    this.selected = selected
+                },
             ) {
-                Row(horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 8.dp)) {
-                    AnimatedVisibility(selected, enter = expandHorizontally() + fadeIn(), exit = shrinkHorizontally() + fadeOut()) {
-                        Row {
-                            Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                        }
-                    }
-                    Text(
-                        option.label,
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
+                Text(option.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }
