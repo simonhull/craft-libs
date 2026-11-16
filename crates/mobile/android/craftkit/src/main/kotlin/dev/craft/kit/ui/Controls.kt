@@ -38,6 +38,8 @@ import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Label
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.SliderState
@@ -70,7 +72,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import java.util.Locale
 
@@ -115,14 +116,16 @@ internal fun CraftSection(title: String, collapsed: Boolean, modifier: Modifier 
 }
 
 /**
- * A value in a range: an expressive slider (a thick track, a bar for a handle) with the value in a
- * chip beside the label; tap the chip to type one. The slider moves through positions 0..1, spread
- * over the range by the scale; values (shown, typed, sent) are in the number's own units.
+ * A value in a range: Material 3's slider (a thick track, a bar for a handle, the value in a label
+ * over the handle while it's held) with the value in a chip beside the label; tap the chip to type
+ * one. The slider moves through positions 0..1, spread over the range by the scale; values (shown,
+ * typed, sent) are in the number's own units.
  *
  * A drag sends `begin`, `change` for each new value, then `commit`; a typed value is one `commit`.
  * Nothing is sent while the app's value is shown: the app's description changes the slider, never an edit.
+ * Disabled, the track still fills to the value, in the disabled colours.
  */
-@OptIn(ExperimentalMaterial3Api::class) // The slider's track and thumb slots.
+@OptIn(ExperimentalMaterial3Api::class) // The value label over the thumb.
 @Composable
 internal fun CraftNumber(node: Node.Number, panel: String, send: (Edit) -> Unit, modifier: Modifier = Modifier) {
     val hold = remember { GestureHold() }
@@ -139,8 +142,8 @@ internal fun CraftNumber(node: Node.Number, panel: String, send: (Edit) -> Unit,
     // Re-described without this control, or the panel closed, mid-drag: put the value back.
     DisposableEffect(Unit) { onDispose { hold.cancel()?.let(emit) } }
 
-    Column(modifier.fillMaxWidth().alpha(if (node.enabled) 1f else 0.38f)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+    Column(modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.alpha(if (node.enabled) 1f else DISABLED_ALPHA)) {
             Text(node.label, style = labelStyle, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
             Surface(
                 onClick = { typing = true },
@@ -162,38 +165,27 @@ internal fun CraftNumber(node: Node.Number, panel: String, send: (Edit) -> Unit,
             }
         }
         val range = node.range
-        // The thumb hears the slider's own presses and drags.
-        val interaction = remember { MutableInteractionSource() }
         val state = remember { SliderState() }
         state.value = NumberMath.position(shown, range, node.scale).toFloat()
+        // The thumb hears the slider's own presses and drags.
+        val interaction = remember { MutableInteractionSource() }
         Slider(
             state = state,
             onValueChange = { t ->
                 val new = NumberMath.snap(NumberMath.valueAt(t.toDouble(), range, node.scale), node.step, range)
-                if (!hold.isDragging) emit(hold.begin(node.value))
-                if (new != hold.shown(node.value)) hold.change(new)?.let(emit)
+                hold.slide(new, node.value).forEach(emit)
             },
             onValueChangeFinished = { hold.commit()?.let(emit) },
             enabled = node.enabled,
             interactionSource = interaction,
             modifier = Modifier.fillMaxWidth().semantics { contentDescription = node.label; stateDescription = formatted },
-            track = { state ->
-                SliderDefaults.Track(
-                    sliderState = state,
-                    modifier = Modifier.height(16.dp),
-                    enabled = node.enabled,
-                    drawStopIndicator = null,
-                    thumbTrackGapSize = 6.dp,
-                )
-            },
             thumb = {
-                SliderDefaults.Thumb(
-                    interactionSource = interaction,
-                    isVertical = false,
-                    enabled = node.enabled,
-                    thumbSize = DpSize(4.dp, 44.dp),
-                )
+                Label(label = { PlainTooltip { Text(formatted, style = TabularDigits) } }, interactionSource = interaction) {
+                    SliderDefaults.Thumb(interactionSource = interaction, isVertical = false, enabled = node.enabled)
+                }
             },
+            // No stop dot: the value chip says where the end is.
+            track = { SliderDefaults.Track(sliderState = it, enabled = node.enabled, drawStopIndicator = null) },
         )
     }
 
@@ -204,6 +196,9 @@ internal fun CraftNumber(node: Node.Number, panel: String, send: (Edit) -> Unit,
         }
     }
 }
+
+/** Material's disabled-content opacity, for a label beside a disabled control. */
+private const val DISABLED_ALPHA = 0.38f
 
 /** Numeric entry for a number: its value typed in the locale, a unit allowed; Set sends it, snapped. */
 @Composable

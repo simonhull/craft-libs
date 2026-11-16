@@ -170,6 +170,16 @@ class GestureHold {
         return Step(running.gesture, Phase.Change, value)
     }
 
+    /**
+     * A slider moved to [value] (snapped) while the app's value is [app]: `begin` if no drag is
+     * running, then `change` if [value] differs from what's shown. A slider reports every move,
+     * the first included, through one callback; this keeps the whole drag one gesture.
+     */
+    fun slide(value: Double, app: Double): List<Step> = buildList {
+        if (!isDragging) add(begin(app))
+        if (value != shown(app)) change(value)?.let(::add)
+    }
+
     /** The drag ended: its last value; `null` if none was running. */
     fun commit(): Step? {
         val running = drag ?: return null

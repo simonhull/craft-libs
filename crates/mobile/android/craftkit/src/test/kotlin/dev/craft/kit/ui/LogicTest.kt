@@ -42,6 +42,31 @@ class GestureHoldTest {
         assertEquals(0.7, hold.shown(0.7), 0.0)
     }
 
+    /** A slider's moves, as its one callback reports them: begin once, a change per new value, then commit. */
+    @Test
+    fun aSliderDragIsBeginChangesAndCommitUnderOneGesture() {
+        val hold = GestureHold()
+        val first = hold.slide(30.0, app = 24.0)
+        assertEquals(listOf(Phase.Begin, Phase.Change), first.map { it.phase })
+        assertEquals(listOf(24.0, 30.0), first.map { it.value })
+        val gesture = first.first().gesture
+        assertEquals("the same snapped value again: nothing", emptyList<GestureHold.Step>(), hold.slide(30.0, app = 24.0))
+        assertEquals(listOf(GestureHold.Step(gesture, Phase.Change, 40.0)), hold.slide(40.0, app = 24.0))
+        assertEquals(GestureHold.Step(gesture, Phase.Commit, 40.0), hold.commit())
+        assertNull("finished twice (a key step reports it again): nothing more", hold.commit())
+        val next = hold.slide(41.0, app = 40.0)
+        assertNotEquals("the next drag is another undo step", gesture, next.first().gesture)
+    }
+
+    /** A tap on the value already shown starts and ends a drag that changes nothing. */
+    @Test
+    fun aSliderTapOnTheShownValueSendsBeginAndCommitOnly() {
+        val hold = GestureHold()
+        val steps = hold.slide(24.0, app = 24.0)
+        assertEquals(listOf(Phase.Begin), steps.map { it.phase })
+        assertEquals(GestureHold.Step(steps.single().gesture, Phase.Commit, 24.0), hold.commit())
+    }
+
     /** One drag is one gesture (one undo step); every drag gets a number no other gesture had. */
     @Test
     fun eachDragHasItsOwnGesture() {
