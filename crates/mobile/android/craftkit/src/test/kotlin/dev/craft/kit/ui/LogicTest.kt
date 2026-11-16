@@ -395,3 +395,23 @@ class TooltipTextTest {
         assertEquals("Tool Options", tooltipText("Tool Options", ""))
     }
 }
+
+class RailScrollTest {
+    @Test
+    fun `before the rail has a viewport it doesn't scroll`() {
+        assertNull(railScrollTarget(index = 0, slotPx = 100f, scrolled = 0, viewport = 0))
+        assertNull(railScrollTarget(index = 9, slotPx = 100f, scrolled = 0, viewport = 0))
+    }
+
+    @Test
+    fun `a tool already in view doesn't scroll`() {
+        assertNull(railScrollTarget(index = 0, slotPx = 100f, scrolled = 0, viewport = 500))
+        assertNull(railScrollTarget(index = 4, slotPx = 100f, scrolled = 0, viewport = 500))
+    }
+
+    @Test
+    fun `a tool out of view is centred, never above the top`() {
+        assertEquals(800, railScrollTarget(index = 10, slotPx = 100f, scrolled = 0, viewport = 500))
+        assertEquals(0, railScrollTarget(index = 0, slotPx = 100f, scrolled = 300, viewport = 500))
+    }
+}

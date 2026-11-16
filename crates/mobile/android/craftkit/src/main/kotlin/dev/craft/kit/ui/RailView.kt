@@ -38,6 +38,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -53,6 +54,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.flow.first
 
 /**
  * The rail: the app's tools in a vertical floating toolbar at the canvas's leading edge (or a row, in
@@ -105,10 +107,8 @@ fun CraftRail(
     // A tool picked by its shortcut scrolls into view.
     LaunchedEffect(palette.selected) {
         val index = palette.slotIndex(palette.selected) ?: return@LaunchedEffect
-        val target = (index * slotPx).toInt()
-        if (target < scroll.value || target + slotPx > scroll.value + scroll.viewportSize) {
-            scroll.animateScrollTo((target - scroll.viewportSize / 2 + slotPx.toInt() / 2).coerceAtLeast(0))
-        }
+        val viewport = snapshotFlow { scroll.viewportSize }.first { it > 0 }
+        railScrollTarget(index, slotPx, scroll.value, viewport)?.let { scroll.animateScrollTo(it) }
     }
 
     val tools = @Composable {

@@ -125,3 +125,15 @@ class RailTaps {
         const val INTERVAL_MILLIS = 350L
     }
 }
+
+/**
+ * Where the rail scrolls to bring the tool in slot [index] into view: centred in a [viewport]
+ * (pixels) scrolled by [scrolled], with each slot [slotPx] tall; null when it's already in view,
+ * or before the rail has been laid out (a zero viewport would scroll the first tool away).
+ */
+fun railScrollTarget(index: Int, slotPx: Float, scrolled: Int, viewport: Int): Int? {
+    if (viewport <= 0) return null
+    val top = (index * slotPx).toInt()
+    if (top >= scrolled && top + slotPx <= scrolled + viewport) return null
+    return (top - viewport / 2 + slotPx.toInt() / 2).coerceAtLeast(0)
+}
