@@ -22,13 +22,22 @@ struct CraftSectionView<Content: View>: View {
             Button {
                 withAnimation { expanded.toggle() }
             } label: {
+                // A heading in the label's colour, not the grouped form's faint caption: it is
+                // also a control, and on a popover's glass a secondary header is hard to read.
+                // Colours, not `.primary`: in a header that level is already the faint one.
                 HStack {
                     Text(title)
+                        .font(.headline)
+                        .foregroundStyle(Color.primary)
                     Spacer()
                     Image(systemName: "chevron.right")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.secondary)
                         .rotationEffect(.degrees(expanded ? 90 : 0))
                         .accessibilityHidden(true)
                 }
+                .textCase(nil)
+                .frame(minHeight: 44)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -58,6 +67,7 @@ struct CraftNumberView: View {
     @Environment(\.locale) private var locale
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.craftDescriptions) private var descriptions
+    @Environment(\.isEnabled) private var isEnabled
 
     var body: some View {
         let shown = hold.shown(app: value)
@@ -74,10 +84,18 @@ struct CraftNumberView: View {
                     typed = Self.format(shown, unit, withUnit: false, locale: locale)
                     typing = true
                 } label: {
-                    Text(formatted).frame(minHeight: 44).contentShape(Rectangle())
+                    // The value in the label's colour on a light fill: it reads as a field to
+                    // tap, and at full contrast on a popover's glass, where the accent didn't.
+                    Text(formatted)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(.fill.tertiary, in: .capsule)
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
                 }
                 .monospacedDigit()
                 .buttonStyle(.borderless)
+                .tint(isEnabled ? .primary : .secondary)
                 .accessibilityLabel(label)
                 .accessibilityValue(formatted)
                 .accessibilityHint("Type a value")
@@ -241,7 +259,9 @@ struct CraftChoiceView: View {
                 picker.pickerStyle(.segmented).labelsHidden()
             }
         } else {
-            picker.pickerStyle(.menu)
+            // The chosen option in the label's colour: the menu style's default grey falls under
+            // 4.5:1 on glass.
+            picker.pickerStyle(.menu).tint(.primary)
         }
     }
 }

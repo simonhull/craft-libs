@@ -20,7 +20,8 @@ extension EnvironmentValues {
 ///   layouts around them. VoiceOver hears the scrubber's value as one that changes often while it
 ///   plays.
 ///
-/// Laid out in a row when it fits, else the buttons and time above the scrubber.
+/// Laid out in a row when it fits, else the buttons and time above the scrubber, else the buttons
+/// above the scrubber and time.
 public struct CraftTransportView: View {
     /// How it's drawn: `bar`, a floating Liquid Glass capsule (the shell's); `inline`, plain, in a
     /// panel's row.
@@ -53,10 +54,10 @@ public struct CraftTransportView: View {
             switch style {
             case .bar:
                 content
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
                     .frame(maxWidth: 720)
-                    .glassEffect(.regular, in: .capsule)
+                    .craftGlass(in: .capsule)
                     // A bar: past this, its controls' labels show in the large content viewer.
                     .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
             case .inline:
@@ -87,6 +88,14 @@ public struct CraftTransportView: View {
                     playhead(.time)
                 }
                 playhead(.track)
+            }
+            // Narrower still (a panel's row in a 320 pt inspector): the time beside the scrubber.
+            VStack(spacing: 0) {
+                buttons
+                HStack(spacing: 6) {
+                    playhead(.track)
+                    playhead(.time)
+                }
             }
         }
     }
@@ -161,7 +170,7 @@ struct CraftTransportPlayhead: View {
         Text(transport.widestLabel)
             .hidden()
             .overlay(alignment: .trailing) { Text(transport.label(at: shown)) }
-            .font(.subheadline.monospacedDigit())
+            .font(.callout.monospacedDigit().weight(.medium))
             .foregroundStyle(transport.enabled ? .primary : .secondary)
             .lineLimit(1)
             .fixedSize()
@@ -238,15 +247,16 @@ struct CraftTransportTrack: View {
             let width = max(proxy.size.width - 2 * Self.inset, 1)
             let x = { (frame: UInt64) in Self.inset + CraftScrub.x(ofFrame: frame, width: width, duration: duration) }
             ZStack(alignment: .leading) {
+                // The frames outside the work area: faint, but a visible line on glass over any canvas.
                 Capsule()
-                    .fill(.secondary.opacity(0.35))
-                    .frame(width: width, height: 4)
+                    .fill(.primary.opacity(0.35))
+                    .frame(width: width, height: 5)
                     .offset(x: Self.inset)
                 if let range {
                     let start = CraftScrub.x(ofEdge: range.lowerBound, width: width, duration: duration)
                     let end = CraftScrub.x(ofEdge: range.upperBound, width: width, duration: duration)
                     Capsule()
-                        .fill(Color.accentColor.opacity(0.6))
+                        .fill(Color.accentColor.opacity(0.85))
                         .frame(width: max(end - start, 4), height: 6)
                         .offset(x: Self.inset + start)
                     bracket.offset(x: Self.inset + start - 1)
@@ -256,9 +266,9 @@ struct CraftTransportTrack: View {
                 // glass, the shading and the canvas, light or dark.
                 Capsule()
                     .fill(.white)
-                    .overlay(Capsule().strokeBorder(.black.opacity(0.2), lineWidth: 0.5))
+                    .overlay(Capsule().strokeBorder(.black.opacity(0.3), lineWidth: 0.5))
                     .frame(width: scrubbing ? 8 : 6, height: scrubbing ? 30 : 24)
-                    .shadow(color: .black.opacity(0.35), radius: 2, y: 1)
+                    .shadow(color: .black.opacity(0.45), radius: 2, y: 1)
                     .offset(x: x(shown) - (scrubbing ? 4 : 3))
                     .animation(.snappy(duration: 0.15), value: scrubbing)
             }

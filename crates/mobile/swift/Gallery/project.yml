@@ -15,6 +15,7 @@ targets:
     sources:
       - GalleryApp.swift
       - GalleryStore.swift
+      - GalleryBackdrop.swift
       # The catalogue craft-mobile generates (UPDATE_CATALOGUE=1 cargo test -p craft-mobile).
       - path: ../../catalogue/ui.json
         buildPhase: resources

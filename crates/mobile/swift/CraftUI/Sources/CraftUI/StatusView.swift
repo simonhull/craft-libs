@@ -152,13 +152,14 @@ struct CraftStatusToast: View {
     var body: some View {
         let error = message.tone == .error
         Label(message.text, systemImage: error ? "exclamationmark.triangle.fill" : "info.circle.fill")
+            .font(.callout.weight(.medium))
             .lineLimit(3)
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
             // A red wash over plain glass: a tinted glass (`.regular.tint`) draws as an opaque white
             // sheet when rendered off screen, which the snapshot tests do.
             .background(error ? Color.red.opacity(0.45) : Color.clear, in: .capsule)
-            .glassEffect(.regular, in: .capsule)
+            .craftGlass(in: .capsule)
             .accessibilityLabel(error ? "Error: \(message.text)" : message.text)
             .accessibilityAddTraits(.isStaticText)
     }
@@ -174,23 +175,27 @@ struct CraftProgressCapsule: View {
         HStack(spacing: 12) {
             if let fraction = progress.fraction {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(progress.label).font(.subheadline)
+                    Text(progress.label).font(.callout.weight(.medium))
                     ProgressView(value: min(max(fraction, 0), 1))
                         .frame(width: 180)
                 }
             } else {
                 ProgressView()
-                Text(progress.label).font(.subheadline)
+                Text(progress.label).font(.callout.weight(.medium))
             }
             if let cancel = progress.cancel {
+                // In the label's colour: the accent on the glass's wash falls under 4.5:1 in light.
                 Button("Cancel", role: .cancel) { command(cancel) }
+                    .font(.callout.weight(.semibold))
                     .buttonStyle(.borderless)
+                    .tint(.primary)
+                    .frame(minHeight: 44)
                     .accessibilityHint("Stops \(progress.label)")
             }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .glassEffect(.regular, in: .capsule)
+        .craftGlass(in: .capsule)
         .accessibilityElement(children: .contain)
     }
 }
