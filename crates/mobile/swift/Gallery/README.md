@@ -18,6 +18,10 @@ inspector would hold them. For each one:
 - **Edits Sent** lists every edit, newest first, as the JSON the app would receive through
   `craft_action`.
 
+**number** also shows a number of the Gallery's own beside the catalogue's: Hardness, in tenths,
+whose track marks its steps with the system's ticks (the catalogue's Size has thousands of steps,
+on a log scale, and shows none).
+
 **tool_palette** also shows the palette as the shell's rail, at the detail's leading edge: tap,
 long-press a slot for its flyout, double-tap or the options button for a stand-in Tool panel.
 `GalleryUITests` drives these too.

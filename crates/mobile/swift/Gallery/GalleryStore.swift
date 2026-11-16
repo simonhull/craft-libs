@@ -41,6 +41,10 @@ final class GalleryStore {
     static let everything = "everything"
 
     private(set) var entries: [Entry] = []
+    /// A number of the Gallery's own beside the catalogue's: a few steps, which its track marks
+    /// as ticks (the catalogue's Size has thousands, on a log scale).
+    private(set) var stepped = CraftNode.number(
+        id: "hardness", label: "Hardness", value: 0.5, min: 0, max: 1, step: 0.1, unit: .percent, enabled: true)
     private(set) var chrome: [Chrome] = []
     /// The catalogue's status, as the app would set it.
     var status = CraftStatus()
@@ -89,7 +93,7 @@ final class GalleryStore {
 
     /// One primitive's example as a panel of its own.
     func panel(for entry: Entry, role: CraftPanelInfo.Role) -> CraftPanel {
-        CraftPanel(id: entry.name, title: entry.name, role: role, nodes: [entry.example])
+        CraftPanel(id: entry.name, title: entry.name, role: role, nodes: entry.name == "number" ? [entry.example, stepped] : [entry.example])
     }
 
     /// Every example in one panel.
@@ -111,7 +115,7 @@ final class GalleryStore {
         defer { playIfPlaying() }
         switch edit.phase {
         case .begin:
-            if let from = entries.lazy.compactMap({ $0.example.value(of: edit.control) }).first {
+            if let from = (entries.map(\.example) + [stepped]).lazy.compactMap({ $0.value(of: edit.control) }).first {
                 drags[edit.gesture] = (edit.control, from)
             }
         case .change, .commit:
@@ -126,6 +130,7 @@ final class GalleryStore {
         for index in entries.indices {
             entries[index].example = entries[index].example.applying(value, to: control)
         }
+        stepped = stepped.applying(value, to: control)
     }
 
     /// The first transport among the examples, as its panels show it.
@@ -191,9 +196,9 @@ final class GalleryStore {
     }
 
     /// A stand-in for the app's Tool panel `id`, which the rail opens for a tool's options: the
-    /// catalogue's number, as a brush's size would be.
+    /// catalogue's number, as a brush's size would be, and the Gallery's stepped one.
     func optionsPanel(_ id: String) -> CraftPanel {
-        CraftPanel(id: id, title: id.capitalized, role: .tool, nodes: entries.filter { $0.name == "number" }.map(\.example))
+        CraftPanel(id: id, title: id.capitalized, role: .tool, nodes: entries.filter { $0.name == "number" }.map(\.example) + [stepped])
     }
 
     func clearLog() {
