@@ -90,6 +90,9 @@ cross them.
   `CraftDevelopment` in `CraftCanvas.swift`.
 - Android emulator: real taps work (`adb shell input tap`); `cmd thermalservice override-status 3`
   and `cmd power set-mode 1` exercise the power state.
+- Native panels: `swift/Gallery` (CraftUI) and `android/gallery` (craftkit's Material 3 renderer)
+  show every primitive of `catalogue/ui.md` live against a fake app. craftkit's JVM tests decode
+  the catalogue's examples: `gradle :craftkit:testDebugUnitTest` from `android/gallery`.
 - iOS 27 SDK apps must use the UIScene life cycle; winit 0.30 can't, which is one reason the
   shell owns the app and this crate never uses winit.
 - Tests: `cargo test -p craft-mobile` (pure logic: actions, picker replies, sizes, touch →
