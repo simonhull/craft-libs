@@ -8,7 +8,7 @@
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
-use eframe::egui_wgpu::{self, RenderState, RendererOptions, ScreenDescriptor, WgpuConfiguration};
+use eframe::egui_wgpu::{self, RenderState, RendererOptions, ScreenDescriptor, WgpuConfiguration, WgpuSetupCreateNew};
 use eframe::wgpu;
 use egui::{Event, Pos2, RawInput, TouchDeviceId, TouchId, TouchPhase, ViewportId};
 
@@ -16,6 +16,7 @@ use crate::control::Control;
 use crate::input::{Input, hover_event, key_events, scroll_events, secondary_click_events};
 use crate::platform::{Pasted, Platform, Request, WriteOutcome};
 use crate::pointer::TouchPointer;
+use crate::storage::FileStorage;
 use crate::{CraftApp, PickedFile, Snapshot, ui};
 
 /// Why the host could not start.
@@ -55,6 +56,23 @@ impl ViewSize {
         let px = egui::vec2(self.width_px as f32, self.height_px as f32);
         px / self.scale
     }
+}
+
+/// egui-wgpu's setup, but the device asks for the adapter's own limits. egui-wgpu's default asks
+/// for wgpu's default limits, which not every adapter meets: the iPad simulator's allows 15
+/// inter-stage shader variables, not 16, and then no device can be made and nothing draws. The
+/// adapter's limits are by definition ones it can grant, and apps get all the GPU offers (an
+/// iPad's 16384-pixel textures, not 8192).
+pub(crate) fn wgpu_configuration() -> WgpuConfiguration {
+    let setup = WgpuSetupCreateNew {
+        device_descriptor: Arc::new(|adapter| wgpu::DeviceDescriptor {
+            label: Some("craft-mobile"),
+            required_limits: adapter.limits(),
+            ..wgpu::DeviceDescriptor::default()
+        }),
+        ..WgpuSetupCreateNew::without_display_handle()
+    };
+    WgpuConfiguration { wgpu_setup: setup.into(), ..WgpuConfiguration::default() }
 }
 
 /// One touch as the platform reports it, in points from the view's top-left corner.
@@ -146,9 +164,25 @@ pub(crate) struct Host<A> {
     /// What the shell last heard of [`CraftApp::busy`].
     busy: bool,
     /// Texture changes from frames that didn't draw, uploaded with the next one that does.
-    pending_textures: egui::TexturesDelta,
+    pending_textures: PendingTextures,
     /// The power state the app last heard: it hears each change once.
     power: Option<crate::Power>,
+    /// Where [`eframe::App::save`] keeps the app's settings; `None` without a data folder.
+    storage: Option<FileStorage>,
+    /// When the app last saved, for [`eframe::App::auto_save_interval`].
+    saved: Instant,
+}
+
+/// Texture changes from frames that didn't draw, for the next one that does. A host that goes
+/// before it draws again drops them: its renderer, and every texture in it, goes too.
+#[derive(Default)]
+struct PendingTextures(egui::TexturesDelta);
+
+impl Drop for PendingTextures {
+    fn drop(&mut self) {
+        // egui checks that a dropped delta is empty; these were never meant to be applied.
+        self.0.clear();
+    }
 }
 
 /// How often a busy app runs while nothing else wakes it, so it notices its work has finished
@@ -213,7 +247,8 @@ impl<A: CraftApp> Host<A> {
             *next = (*next).min(at);
         });
         let platform = Platform::default();
-        let app = A::create(&ctx, Some(render_state.clone()), platform.clone());
+        let storage = platform.data_dir().map(FileStorage::open);
+        let app = A::create(&ctx, Some(render_state.clone()), platform.clone(), storage.as_ref().map(|s| s as &dyn eframe::Storage));
         Ok(Self {
             ctx,
             app,
@@ -235,8 +270,10 @@ impl<A: CraftApp> Host<A> {
             keyboard_shown: false,
             on_screen: true,
             busy: false,
-            pending_textures: egui::TexturesDelta::default(),
+            pending_textures: PendingTextures::default(),
             power: None,
+            storage,
+            saved: Instant::now(),
         })
     }
 
@@ -275,6 +312,7 @@ impl<A: CraftApp> Host<A> {
                 log::warn!("craft-mobile: no surface texture ({other:?}); reconfiguring");
                 surface.configure(&rs.device, &self.surface_config);
                 rs.queue.submit(user_buffers);
+                free_textures(&mut rs.renderer.write(), &mut textures);
                 self.wake();
                 return;
             }
@@ -298,10 +336,7 @@ impl<A: CraftApp> Host<A> {
         }
         rs.queue.submit(user_buffers.into_iter().chain(std::iter::once(encoder.finish())));
         rs.queue.present(texture);
-        let mut renderer = rs.renderer.write();
-        for id in &textures.free {
-            renderer.free_texture(id);
-        }
+        free_textures(&mut rs.renderer.write(), &mut textures);
     }
 
     /// Tell the shell when the panels' state changed.
@@ -464,6 +499,8 @@ impl<A: CraftApp> HostOps for Host<A> {
             Input::Suspend => {
                 self.on_screen = false;
                 let started = Instant::now();
+                // Saved now, as eframe saves on exit: from here the OS may end the app without a word.
+                self.save();
                 self.app.suspend(&self.ctx);
                 // The shell waits for this on the thread the OS watches: work belongs on a worker,
                 // with the app busy until it's done.
@@ -524,6 +561,14 @@ fn run_controls<A: CraftApp>(app: &mut A, ctx: &egui::Context, controls: &[Contr
     rejected
 }
 
+/// Free the textures egui let go of. Taken out, not just read: egui (Storytold's fork) checks in
+/// debug builds that a texture delta is empty when it is dropped, so no freed texture is forgotten.
+fn free_textures(renderer: &mut egui_wgpu::Renderer, textures: &mut egui::TexturesDelta) {
+    for id in textures.free.drain() {
+        renderer.free_texture(&id);
+    }
+}
+
 /// An RGBA8 buffer as an egui image, when its length matches its size.
 fn color_image(width: u32, height: u32, rgba: &[u8]) -> Option<egui::ColorImage> {
     let (w, h) = (usize::try_from(width).ok()?, usize::try_from(height).ok()?);
@@ -566,7 +611,7 @@ impl<A: CraftApp> Host<A> {
         self.platform.set_pasted(None);
         self.platform_output(&output.platform_output);
         self.viewport_commands(output.viewport_output.values().flat_map(|v| &v.commands));
-        let mut textures = std::mem::take(&mut self.pending_textures);
+        let mut textures = std::mem::take(&mut self.pending_textures.0);
         textures.append(output.textures_delta);
         match surface {
             Some(surface) => {
@@ -574,7 +619,7 @@ impl<A: CraftApp> Host<A> {
                 let primitives = self.ctx.tessellate(output.shapes, ppp);
                 self.paint(surface, &primitives, textures, ppp);
             }
-            None => self.pending_textures = textures,
+            None => self.pending_textures.0 = textures,
         }
         if rejected {
             // The shell shows the app's values again, even where nothing changed.
@@ -583,7 +628,19 @@ impl<A: CraftApp> Host<A> {
         self.publish_snapshot();
         self.publish_panels();
         self.publish_busy();
+        if self.saved.elapsed() >= self.app.auto_save_interval() {
+            self.save();
+        }
         true
+    }
+
+    /// Let the app save its settings, and write them if they changed.
+    fn save(&mut self) {
+        if let Some(storage) = &mut self.storage {
+            self.app.save(storage);
+            eframe::Storage::flush(storage);
+        }
+        self.saved = Instant::now();
     }
 
     /// Tell the shell when the app starts or stops being busy (its own work, or a write in place
@@ -684,6 +741,64 @@ mod tests {
         assert!(matches!(touch_event(t), Event::Touch { force: None, .. }));
     }
 
+    /// egui's fork checks that a texture delta is empty when it is dropped (debug builds panic
+    /// otherwise), so freeing must take the ids out, not just read them.
+    #[test]
+    fn a_frames_freed_textures_are_taken_out_of_its_delta() {
+        let Ok(adapter) = pollster::block_on(wgpu::Instance::default().request_adapter(&wgpu::RequestAdapterOptions::default())) else {
+            eprintln!("no GPU adapter here: skipped");
+            return;
+        };
+        let (device, _queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).expect("a device with default limits");
+        let mut renderer = egui_wgpu::Renderer::new(&device, wgpu::TextureFormat::Rgba8Unorm, RendererOptions::default());
+        let mut textures = egui::TexturesDelta::default();
+        textures.free(egui::TextureId::Managed(7));
+        free_textures(&mut renderer, &mut textures);
+        assert!(textures.is_empty());
+    }
+
+    /// Texture changes kept for a frame that never comes (the host goes while off screen) are
+    /// dropped without tripping that check.
+    #[test]
+    fn pending_texture_changes_can_be_dropped() {
+        let mut pending = PendingTextures::default();
+        pending.0.free(egui::TextureId::Managed(7));
+        drop(pending);
+    }
+
+    /// Found in a `TextureCraft` spike: two fingers never orbited or zoomed, because egui begins a
+    /// multi-touch gesture only once its pointer has a position, and a gesture's fingers gave it none.
+    #[test]
+    fn two_fingers_pinch_in_egui() {
+        let (ctx, mut pointer, t0) = (egui::Context::default(), TouchPointer::default(), Instant::now());
+        let mut zoom = Vec::new();
+        let frames: [&[(u64, TouchPhase, f32)]; 5] = [
+            &[(1, TouchPhase::Start, 100.0)],
+            &[(2, TouchPhase::Start, 200.0)],
+            &[(1, TouchPhase::Move, 90.0), (2, TouchPhase::Move, 210.0)],
+            &[(1, TouchPhase::Move, 80.0), (2, TouchPhase::Move, 220.0)],
+            &[(1, TouchPhase::Move, 70.0), (2, TouchPhase::Move, 230.0)],
+        ];
+        for (i, touches) in (0_u32..).zip(frames) {
+            let now = t0 + Duration::from_millis(10) * i;
+            let mut events = pointer.tick(now);
+            for &(id, phase, x) in touches {
+                let t = Touch { id, phase, pos: Pos2::new(x, 100.0), force: 0.0 };
+                events.push(touch_event(t));
+                events.extend(pointer.touch(t, now, false));
+            }
+            let raw = RawInput { time: Some(f64::from(i) / 100.0), events, ..RawInput::default() };
+            let mut output = ctx.run_ui(raw, |ui| {
+                zoom.push(ui.input(|input| (input.multi_touch().is_some(), input.zoom_delta(), input.pointer.any_down())));
+            });
+            // Nothing draws here: egui checks that its texture changes were taken.
+            output.textures_delta.clear();
+        }
+        assert!(zoom.iter().all(|&(_, _, down)| !down), "nothing presses during the gesture: {zoom:?}");
+        let pinching: Vec<f32> = zoom.iter().filter(|&&(active, _, _)| active).map(|&(_, delta, _)| delta).collect();
+        assert!(pinching.iter().any(|&delta| delta > 1.0), "spreading fingers zoom in: {zoom:?}");
+    }
+
     /// Off screen nothing draws (no GPU work in the background); a busy app still runs.
     #[test]
     fn only_an_app_on_screen_draws_and_only_a_busy_one_runs_off_screen() {
@@ -703,7 +818,7 @@ mod tests {
     }
 
     impl CraftApp for FakeApp {
-        fn create(_ctx: &egui::Context, _wgpu: Option<RenderState>, _platform: Platform) -> Self {
+        fn create(_ctx: &egui::Context, _wgpu: Option<RenderState>, _platform: Platform, _storage: Option<&dyn eframe::Storage>) -> Self {
             Self(Vec::new())
         }
         fn open_file(&mut self, _ctx: &egui::Context, _file: PickedFile) {}
