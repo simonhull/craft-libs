@@ -1,6 +1,5 @@
 package dev.craft.kit.ui
 
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -23,8 +22,10 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -135,21 +136,23 @@ private fun TransportButton(icon: ImageVector, label: String, enabled: Boolean, 
     IconButton(onClick = onClick, enabled = enabled) { Icon(icon, contentDescription = label) }
 }
 
-/** Play and Pause as one large button whose shape morphs: round while paused, a rounded square while playing. */
+/** Play and Pause as one medium filled icon button whose shape morphs: round while paused, a rounded square while playing. */
 @Composable
 private fun PlayPause(playing: Boolean, enabled: Boolean, onClick: () -> Unit) {
-    val corner by animateDpAsState(if (playing) 16.dp else 28.dp, label = "playShape")
-    Surface(
+    FilledIconButton(
         onClick = onClick,
         enabled = enabled,
-        shape = RoundedCornerShape(corner),
-        color = MaterialTheme.colorScheme.primary,
-        contentColor = MaterialTheme.colorScheme.onPrimary,
-        modifier = Modifier.padding(horizontal = 4.dp).size(56.dp),
+        shapes = IconButtonDefaults.shapes(
+            shape = if (playing) IconButtonDefaults.mediumSquareShape else IconButtonDefaults.mediumRoundShape,
+            pressedShape = IconButtonDefaults.mediumPressedShape,
+        ),
+        modifier = Modifier.padding(horizontal = 4.dp).size(IconButtonDefaults.mediumContainerSize()),
     ) {
-        Box(contentAlignment = Alignment.Center) {
-            Icon(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, contentDescription = if (playing) "Pause" else "Play", modifier = Modifier.size(28.dp))
-        }
+        Icon(
+            if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+            contentDescription = if (playing) "Pause" else "Play",
+            modifier = Modifier.size(IconButtonDefaults.mediumIconSize),
+        )
     }
 }
 
