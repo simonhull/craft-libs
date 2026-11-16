@@ -9,29 +9,38 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberDrawerState
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -45,7 +54,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import dev.craft.kit.ChromeLayout
 import dev.craft.kit.CraftTheme
 import dev.craft.kit.ui.CraftMenuBar
 import dev.craft.kit.ui.CraftPanelView
@@ -60,6 +71,7 @@ import dev.craft.kit.ui.PanelRole
 import dev.craft.kit.ui.PopoverSide
 import dev.craft.kit.ui.Symbols
 import dev.craft.kit.ui.Tone
+import kotlinx.coroutines.launch
 
 /**
  * Every craftkit native panel primitive from the generated catalogue, live against a fake app: each
@@ -93,17 +105,52 @@ private fun Gallery(start: String?) {
     LaunchedEffect(start) { start?.let { selection = it } }
     CompositionLocalProvider(LocalCraftDescriptions provides store::descriptions, LocalCraftLiveValues provides store.live) {
         Surface(color = MaterialTheme.colorScheme.surfaceContainerLowest) {
-            Row(Modifier.fillMaxSize().safeDrawingPadding()) {
-                Sidebar(store, selection) { selection = it }
-                Box(Modifier.weight(1f).fillMaxHeight()) { Detail(store, selection) }
+            // Laid out again at every window size, as a desktop window is resized.
+            BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding()) {
+                val layout = ChromeLayout.of(maxWidth, maxHeight)
+                if (maxWidth >= SIDEBAR_INLINE) {
+                    Row(Modifier.fillMaxSize()) {
+                        Sidebar(store, selection, Modifier.width(240.dp)) { selection = it }
+                        Box(Modifier.weight(1f).fillMaxHeight()) { Detail(store, selection, Frame(layout, openSidebar = null)) }
+                    }
+                } else {
+                    // Too narrow for the sidebar beside a primitive and its sheet: it's a drawer.
+                    val drawer = rememberDrawerState(DrawerValue.Closed)
+                    val scope = rememberCoroutineScope()
+                    ModalNavigationDrawer(
+                        drawerState = drawer,
+                        drawerContent = {
+                            ModalDrawerSheet(Modifier.width(280.dp)) {
+                                Sidebar(store, selection) {
+                                    selection = it
+                                    scope.launch { drawer.close() }
+                                }
+                            }
+                        },
+                    ) {
+                        Box(Modifier.fillMaxSize()) { Detail(store, selection, Frame(layout, openSidebar = { scope.launch { drawer.open() } })) }
+                    }
+                }
             }
         }
     }
 }
 
+/** Below this width the sidebar folds into a drawer: it, a primitive's log and its side sheet don't fit. */
+private val SIDEBAR_INLINE = 900.dp
+
+/** Where the shell would put panels at this window size, and how to open the sidebar when it's a drawer. */
+private class Frame(val layout: ChromeLayout, val openSidebar: (() -> Unit)?)
+
+/** The app bar's button for the sidebar, when it's a drawer. */
 @Composable
-private fun Sidebar(store: GalleryStore, selection: String, select: (String) -> Unit) {
-    LazyColumn(Modifier.width(240.dp).fillMaxHeight().padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+private fun SidebarButton(frame: Frame) {
+    frame.openSidebar?.let { IconButton(onClick = it) { Icon(Symbols.Menu, contentDescription = "Primitives") } }
+}
+
+@Composable
+private fun Sidebar(store: GalleryStore, selection: String, modifier: Modifier = Modifier, select: (String) -> Unit) {
+    LazyColumn(modifier.fillMaxHeight().padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         item { Text("CraftUI", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(16.dp)) }
         item { SectionTitle("Primitives") }
         items(store.entries, key = { it.name }) { entry -> SidebarItem(entry.name, selection, select) }
@@ -129,65 +176,99 @@ private fun SidebarItem(name: String, selection: String, select: (String) -> Uni
 }
 
 @Composable
-private fun BoxScope.Detail(store: GalleryStore, selection: String) {
+private fun BoxScope.Detail(store: GalleryStore, selection: String, frame: Frame) {
     store.problem?.let { problem ->
         Text(problem, modifier = Modifier.padding(32.dp))
         return
     }
+    // The inspector stays open (or closed) from page to page, and from side sheet to bottom sheet as
+    // the window is resized; it starts open only where it's a side sheet, as an app's would.
+    var inspector by rememberSaveable { mutableStateOf(frame.layout.sideSheet) }
+    val sideSheet = inspector && frame.layout.sideSheet
     when (selection) {
-        "menu_bar" -> MenuDetail(store)
-        "status" -> StatusDetail(store)
-        GalleryStore.EVERYTHING -> PanelDetail(store, "Everything", "Every example in one panel, as an app's inspector would put them.") { store.everything(it) }
+        "menu_bar" -> MenuDetail(store, frame)
+        "status" -> StatusDetail(store, frame)
+        GalleryStore.EVERYTHING -> PanelDetail(store, "Everything", "Every example in one panel, as an app's inspector would put them.", frame, inspector, { inspector = it }) { store.everything(it) }
         else -> {
             val entry = store.entries.firstOrNull { it.name == selection } ?: return
-            PanelDetail(store, entry.name, entry.about) { store.panel(entry, it) }
+            PanelDetail(store, entry.name, entry.about, frame, inspector, { inspector = it }) { store.panel(entry, it) }
             when (entry.name) {
                 "tool_palette" -> GalleryRail(store, Modifier.align(Alignment.CenterStart).padding(start = 16.dp))
                 "transport" -> store.transport?.let { transport ->
-                    CraftTransport(transport, GalleryStore.TIMELINE, store::send, Modifier.align(Alignment.BottomCenter).padding(start = 24.dp, end = 400.dp, bottom = 24.dp))
+                    // Clear of the side sheet while it's open, as the shell keeps it.
+                    val end = if (sideSheet) 400.dp else 24.dp
+                    CraftTransport(transport, GalleryStore.TIMELINE, store::send, Modifier.align(Alignment.BottomCenter).padding(start = 24.dp, end = end, bottom = 24.dp))
                 }
             }
         }
     }
 }
 
-/** A primitive (or all of them): what it is and the edits it sent; the panel in a side sheet, and as a popover from the app bar. */
+/**
+ * A primitive (or all of them): what it is and the edits it sent; the panel in the inspector, and
+ * as a tool from the app bar, each where the shell would put it at this window size (a side sheet
+ * or a bottom sheet; a popover or, compact, a bottom sheet).
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PanelDetail(store: GalleryStore, title: String, about: String, panel: (PanelRole) -> Panel) {
-    var inspector by rememberSaveable { mutableStateOf(true) }
+private fun PanelDetail(
+    store: GalleryStore,
+    title: String,
+    about: String,
+    frame: Frame,
+    inspector: Boolean,
+    onInspector: (Boolean) -> Unit,
+    panel: (PanelRole) -> Panel,
+) {
     var popover by remember { mutableStateOf(false) }
     Row(Modifier.fillMaxSize()) {
         Column(Modifier.weight(1f)) {
             TopAppBar(
-                title = { Text(title, fontFamily = FontFamily.Monospace) },
+                title = { Text(title, fontFamily = FontFamily.Monospace, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                navigationIcon = { SidebarButton(frame) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
                 actions = {
                     IconButton(onClick = store::clearLog, enabled = store.log.isNotEmpty()) { Icon(Symbols.Delete, contentDescription = "Clear Log") }
                     Box {
                         IconToggleButton(checked = popover, onCheckedChange = { popover = it }) { Icon(Symbols.PictureInPicture, contentDescription = "Popover") }
-                        if (popover) {
+                        if (popover && frame.layout.compact) {
+                            ModalBottomSheet(onDismissRequest = { popover = false }, sheetState = rememberModalBottomSheetState()) {
+                                SheetTitle(title)
+                                CraftPanelView(panel(PanelRole.Tool), store::send)
+                            }
+                        } else if (popover) {
                             CraftPopover(PopoverSide.Below, onDismiss = { popover = false }, title = title) { CraftPanelView(panel(PanelRole.Tool), store::send) }
                         }
                     }
-                    IconToggleButton(checked = inspector, onCheckedChange = { inspector = it }) { Icon(Symbols.ViewSidebar, contentDescription = "Inspector") }
+                    IconToggleButton(checked = inspector, onCheckedChange = onInspector) { Icon(Symbols.ViewSidebar, contentDescription = "Inspector") }
                 },
             )
             Log(store, about, Modifier.padding(start = if (title == "tool_palette") 88.dp else 0.dp))
         }
-        if (inspector) {
+        if (inspector && frame.layout.sideSheet) {
             Surface(
                 shape = RoundedCornerShape(28.dp),
                 color = MaterialTheme.colorScheme.surfaceContainerLow,
                 modifier = Modifier.padding(12.dp).width(360.dp).fillMaxHeight(),
             ) {
                 Column {
-                    Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = 24.dp, top = 20.dp))
+                    SheetTitle(title)
                     CraftPanelView(panel(PanelRole.Inspector), store::send)
                 }
             }
         }
     }
+    if (inspector && !frame.layout.sideSheet) {
+        ModalBottomSheet(onDismissRequest = { onInspector(false) }, sheetState = rememberModalBottomSheetState()) {
+            SheetTitle(title)
+            CraftPanelView(panel(PanelRole.Inspector), store::send, Modifier.navigationBarsPadding())
+        }
+    }
+}
+
+@Composable
+private fun SheetTitle(title: String) {
+    Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = 24.dp, top = 20.dp))
 }
 
 /** What the primitive is, then every message it sent, newest first, as the JSON the app would receive. */
@@ -225,7 +306,7 @@ private fun GalleryRail(store: GalleryStore, modifier: Modifier) {
 /** The catalogue's menus in an app bar, wide and folded (as when narrow); what each item sends. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MenuDetail(store: GalleryStore) {
+private fun MenuDetail(store: GalleryStore, frame: Frame) {
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
             title = {
@@ -234,6 +315,7 @@ private fun MenuDetail(store: GalleryStore) {
                     CraftMenuBar(store.menus, store::command, Modifier.padding(start = 24.dp))
                 }
             },
+            navigationIcon = { SidebarButton(frame) },
             colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
         )
         Row(Modifier.padding(24.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -248,10 +330,16 @@ private fun MenuDetail(store: GalleryStore) {
 
 /** The catalogue's status over the detail, as the shell shows it over the canvas, with buttons that set a new one. */
 @Composable
-private fun StatusDetail(store: GalleryStore) {
+private fun StatusDetail(store: GalleryStore, frame: Frame) {
     Box(Modifier.fillMaxSize()) {
+        Box(Modifier.padding(4.dp)) { SidebarButton(frame) }
         Column(Modifier.fillMaxSize().padding(top = 96.dp)) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // The buttons wrap in a narrow window.
+            FlowRow(
+                Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 FilledTonalButton(onClick = { store.say("Saved great-wave.pcraft", Tone.Info) }) { Text("Message") }
                 FilledTonalButton(onClick = { store.say("Couldn't open b.psd: not a Photoshop file", Tone.Error) }) { Text("Error") }
                 FilledTonalButton(onClick = store::startJob) { Text("Job") }
