@@ -1,6 +1,7 @@
 package dev.craft.kit
 
 import android.util.Log
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -34,6 +35,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -43,12 +45,16 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import dev.craft.kit.ui.CraftIcons
 import dev.craft.kit.ui.CraftPanelHost
@@ -62,6 +68,7 @@ import dev.craft.kit.ui.PanelRole
 import dev.craft.kit.ui.PopoverSide
 import dev.craft.kit.ui.firstTransport
 import dev.craft.kit.ui.toolPalette
+import kotlin.coroutines.cancellation.CancellationException
 
 // The app's native panels in the shell. Each part reads only the state it shows: the app bar's
 // buttons read the panels offered (which change rarely), an open panel its description, and only a
@@ -206,6 +213,9 @@ private fun PanelSheetContent(ui: CraftUi, info: PanelInfo, close: (() -> Unit)?
     }
 }
 
+/** How much smaller the side sheet gets at the end of a back gesture, as Material's sheets do. */
+private const val PREDICTIVE_BACK_SHRINK = 0.1f
+
 /** How much of the canvas's width the side sheet covers, its margins included. */
 internal val SIDE_SHEET_ROOM = 392.dp
 
@@ -216,6 +226,19 @@ internal fun InspectorSideSheet(ui: CraftUi, shell: NativeChrome, modifier: Modi
     // The last one stays drawn while the sheet slides away.
     var last by remember { mutableStateOf(info) }
     if (info != null) last = info
+    // Back closes it, the predictive way: the sheet shrinks toward its edge as the gesture goes.
+    var back by remember { mutableFloatStateOf(0f) }
+    val edge = if (LocalLayoutDirection.current == LayoutDirection.Ltr) 1f else 0f
+    LaunchedEffect(info != null) { if (info != null) back = 0f }
+    PredictiveBackHandler(enabled = info != null) { events ->
+        try {
+            events.collect { back = it.progress }
+            shell.inspector = null
+        } catch (cancelled: CancellationException) {
+            back = 0f
+            throw cancelled
+        }
+    }
     AnimatedVisibility(
         visible = info != null,
         modifier = modifier,
@@ -226,7 +249,16 @@ internal fun InspectorSideSheet(ui: CraftUi, shell: NativeChrome, modifier: Modi
             shape = RoundedCornerShape(28.dp),
             color = MaterialTheme.colorScheme.surfaceContainerLow,
             shadowElevation = 6.dp,
-            modifier = Modifier.padding(16.dp).width(360.dp).fillMaxHeight(),
+            modifier = Modifier
+                .padding(16.dp)
+                .width(360.dp)
+                .fillMaxHeight()
+                .graphicsLayer {
+                    val scale = 1f - PREDICTIVE_BACK_SHRINK * back
+                    scaleX = scale
+                    scaleY = scale
+                    transformOrigin = TransformOrigin(edge, 0.5f)
+                },
         ) {
             last?.let { PanelSheetContent(ui, it, close = { shell.inspector = null }) }
         }
