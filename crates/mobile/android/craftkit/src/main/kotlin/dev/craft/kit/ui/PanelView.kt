@@ -15,8 +15,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.ReportProblem
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -82,6 +83,7 @@ private fun Placeholder(icon: ImageVector, text: String) {
  * One of the app's panels from [ui], as described. Until the app describes it, a spinner; if it
  * answered without it (it offers the panel but can't describe it now), "Not available".
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class) // LoadingIndicator, still experimental in 1.5.
 @Composable
 fun CraftPanelHost(ui: CraftUi, id: String, modifier: Modifier = Modifier) {
     val panel = ui.open[id]
@@ -97,7 +99,8 @@ fun CraftPanelHost(ui: CraftUi, id: String, modifier: Modifier = Modifier) {
                 Text("$title has nothing to show right now.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else {
-            CircularProgressIndicator()
+            // A short wait for the app to describe the panel: the expressive loading indicator.
+            LoadingIndicator()
         }
     }
 }
