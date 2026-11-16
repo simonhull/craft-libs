@@ -112,6 +112,7 @@ struct GalleryDetail: View {
         .inspector(isPresented: $showsInspector) {
             NavigationStack {
                 CraftPanelView(panel: panel(.inspector), send: store.send)
+                    .craftPanelCloseButton { showsInspector = false }
             }
             .inspectorColumnWidth(min: 280, ideal: 320, max: 400)
         }
