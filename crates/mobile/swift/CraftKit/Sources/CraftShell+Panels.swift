@@ -46,7 +46,7 @@ struct CraftPanelTools: View {
     }
 
     private func button(_ info: CraftPanelInfo, open: Bool, action: @escaping () -> Void) -> some View {
-        CraftToolButton(label: info.accessibilityName, symbol: info.icon, action: action)
+        CraftToolButton(label: info.accessibilityName, symbol: info.icon, isOn: open, action: action)
             .padding(6)
             .craftGlass(open ? .regular.tint(.accentColor).interactive() : .regular.interactive(), in: .circle)
             .accessibilityAddTraits(open ? .isSelected : [])
@@ -191,20 +191,25 @@ struct CraftShellTransport: View {
     }
 }
 
-/// A toolbar button: an SF Symbol, 44 pt square.
+/// A toolbar button: an SF Symbol, 44 pt square, filled while what it opens is open; named in a
+/// tooltip under the pointer, which highlights it.
 struct CraftToolButton: View {
     let label: String
     let symbol: String
+    var isOn = false
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.title3)
+                .symbolVariant(isOn ? .fill : .none)
                 .frame(width: 44, height: 44)
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
+        .craftHoverHighlight(in: .circle)
         .accessibilityLabel(label)
+        .help(label)
     }
 }

@@ -306,7 +306,7 @@ public struct CraftShell: View {
         .padding(6)
         .craftGlass(.regular.interactive(), in: .capsule)
 
-        tool(snapshot.itemsTitle, "square.3.layers.3d") { toggleInspector(.items) }
+        CraftToolButton(label: snapshot.itemsTitle, symbol: "square.3.layers.3d", isOn: isShowing(.items)) { toggleInspector(.items) }
             .padding(6)
             .craftGlass(isShowing(.items) ? .regular.tint(.accentColor).interactive() : .regular.interactive(), in: .circle)
     }
