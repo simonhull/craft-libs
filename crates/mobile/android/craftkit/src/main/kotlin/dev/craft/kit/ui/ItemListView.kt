@@ -23,13 +23,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.DragHandle
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.outlined.RadioButtonUnchecked
-import androidx.compose.material.icons.outlined.Visibility
-import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -341,7 +334,7 @@ private fun RowContent(
             Row(Modifier.padding(start = 4.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (multiSelecting) {
                     Icon(
-                        if (row.selected) Icons.Filled.CheckCircle else Icons.Outlined.RadioButtonUnchecked,
+                        if (row.selected) Symbols.CheckCircleFilled else Symbols.RadioButtonUnchecked,
                         contentDescription = null,
                         tint = if (row.selected) colors.primary else colors.onSurfaceVariant,
                         modifier = Modifier.padding(start = 8.dp, end = 4.dp),
@@ -351,7 +344,7 @@ private fun RowContent(
                 if (visible != null) {
                     IconButton(onClick = { one(EditValue.SetVisible(row.id, !visible)) }) {
                         Icon(
-                            if (visible) Icons.Outlined.Visibility else Icons.Outlined.VisibilityOff,
+                            if (visible) Symbols.Visibility else Symbols.VisibilityOff,
                             contentDescription = if (visible) "Hide ${row.title}" else "Show ${row.title}",
                             tint = if (visible) content else colors.onSurfaceVariant.copy(alpha = 0.6f),
                         )
@@ -374,7 +367,7 @@ private fun RowContent(
                 }
                 if (reorderable) {
                     Box(handle.size(48.dp), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Filled.DragHandle, contentDescription = "Reorder ${row.title}", tint = colors.onSurfaceVariant)
+                        Icon(Symbols.DragHandle, contentDescription = "Reorder ${row.title}", tint = colors.onSurfaceVariant)
                     }
                 }
             }
@@ -383,7 +376,7 @@ private fun RowContent(
             if (row.rename == Rename.Allowed) {
                 DropdownMenuItem(
                     text = { Text("Rename…") },
-                    leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) },
+                    leadingIcon = { Icon(Symbols.Edit, contentDescription = null) },
                     onClick = {
                         menu = false
                         startRenaming()

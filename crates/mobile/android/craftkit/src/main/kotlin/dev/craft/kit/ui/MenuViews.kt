@@ -7,10 +7,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -77,7 +73,7 @@ private fun FoldedMenus(bar: MenuBar, choose: (String) -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
         TextButton(onClick = { open = true }) {
-            Icon(Icons.Filled.Menu, contentDescription = null, modifier = Modifier.size(18.dp))
+            Icon(Symbols.Menu, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
             Text("Menu")
         }
@@ -109,7 +105,7 @@ internal fun MenuItems(items: List<MenuEntry>, choose: (String) -> Unit) {
                     onClick = { choose(command.id) },
                     enabled = command.enabled,
                     leadingIcon = command.checked?.let { checked ->
-                        { if (checked) Icon(Icons.Filled.Check, contentDescription = "Checked") else Spacer(Modifier.size(24.dp)) }
+                        { if (checked) Icon(Symbols.Check, contentDescription = "Checked") else Spacer(Modifier.size(24.dp)) }
                     },
                     trailingIcon = command.shortcut?.let { shortcut ->
                         { Text(shortcut.label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -130,7 +126,7 @@ private fun Submenu(label: String, items: List<MenuEntry>, choose: (String) -> U
         DropdownMenuItem(
             text = { Text(label) },
             onClick = { open = true },
-            trailingIcon = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) },
+            trailingIcon = { Icon(Symbols.ChevronRight, contentDescription = null) },
             modifier = Modifier.onSizeChanged { size = with(density) { DpSize(it.width.toDp(), it.height.toDp()) } },
         )
         DropdownMenu(expanded = open, onDismissRequest = { open = false }, offset = DpOffset(size.width, -size.height), shape = RoundedCornerShape(16.dp)) {

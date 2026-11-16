@@ -12,9 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.HelpOutline
-import androidx.compose.material.icons.outlined.ReportProblem
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LoadingIndicator
@@ -64,8 +61,8 @@ private fun CraftNodeView(node: Node, panel: String, send: (Edit) -> Unit) {
         is ToolPalette -> CraftRail(node.withoutOptions, panel, send, command = {}, optionsPanel = null, onOptionsPanel = {}, horizontal = true)
         // In a panel, plain; the floating bar is the shell's (`transport` role).
         is Transport -> CraftTransport(node, panel, send, style = TransportStyle.Inline)
-        is Node.Unknown -> Placeholder(Icons.AutoMirrored.Outlined.HelpOutline, "Needs a newer craftkit: ${node.type}")
-        is Node.Malformed -> Placeholder(Icons.Outlined.ReportProblem, "This ${node.type} couldn't be shown")
+        is Node.Unknown -> Placeholder(Symbols.Help, "Needs a newer craftkit: ${node.type}")
+        is Node.Malformed -> Placeholder(Symbols.Warning, "This ${node.type} couldn't be shown")
     }
 }
 

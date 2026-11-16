@@ -21,10 +21,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ViewSidebar
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.PictureInPicture
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -62,6 +58,7 @@ import dev.craft.kit.ui.LocalCraftLiveValues
 import dev.craft.kit.ui.Panel
 import dev.craft.kit.ui.PanelRole
 import dev.craft.kit.ui.PopoverSide
+import dev.craft.kit.ui.Symbols
 import dev.craft.kit.ui.Tone
 
 /**
@@ -166,14 +163,14 @@ private fun PanelDetail(store: GalleryStore, title: String, about: String, panel
                 title = { Text(title, fontFamily = FontFamily.Monospace) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
                 actions = {
-                    IconButton(onClick = store::clearLog, enabled = store.log.isNotEmpty()) { Icon(Icons.Outlined.Delete, contentDescription = "Clear Log") }
+                    IconButton(onClick = store::clearLog, enabled = store.log.isNotEmpty()) { Icon(Symbols.Delete, contentDescription = "Clear Log") }
                     Box {
-                        IconToggleButton(checked = popover, onCheckedChange = { popover = it }) { Icon(Icons.Outlined.PictureInPicture, contentDescription = "Popover") }
+                        IconToggleButton(checked = popover, onCheckedChange = { popover = it }) { Icon(Symbols.PictureInPicture, contentDescription = "Popover") }
                         if (popover) {
                             CraftPopover(PopoverSide.Below, onDismiss = { popover = false }) { CraftPanelView(panel(PanelRole.Tool), store::send) }
                         }
                     }
-                    IconToggleButton(checked = inspector, onCheckedChange = { inspector = it }) { Icon(Icons.AutoMirrored.Outlined.ViewSidebar, contentDescription = "Inspector") }
+                    IconToggleButton(checked = inspector, onCheckedChange = { inspector = it }) { Icon(Symbols.ViewSidebar, contentDescription = "Inspector") }
                 },
             )
             Log(store, about, Modifier.padding(start = if (title == "tool_palette") 88.dp else 0.dp))

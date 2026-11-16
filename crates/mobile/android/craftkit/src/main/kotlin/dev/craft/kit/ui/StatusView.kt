@@ -20,10 +20,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.outlined.ErrorOutline
-import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearWavyProgressIndicator
@@ -111,11 +107,11 @@ private fun StatusMessage(message: Status.Message, dismiss: () -> Unit) {
         containerColor = if (error) colors.errorContainer else colors.inverseSurface,
         contentColor = if (error) colors.onErrorContainer else colors.inverseOnSurface,
         dismissAction = {
-            IconButton(onClick = dismiss) { Icon(Icons.Filled.Close, contentDescription = "Dismiss") }
+            IconButton(onClick = dismiss) { Icon(Symbols.Close, contentDescription = "Dismiss") }
         },
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(if (error) Icons.Outlined.ErrorOutline else Icons.Outlined.Info, contentDescription = null, modifier = Modifier.size(20.dp))
+            Icon(if (error) Symbols.Error else Symbols.Info, contentDescription = null, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(12.dp))
             Text(message.text, maxLines = 3, overflow = TextOverflow.Ellipsis)
         }

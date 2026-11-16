@@ -1,5 +1,8 @@
+<!-- Material Symbols Rounded `layers`, from scripts/material-symbols.py (Apache-2.0, see ATTRIBUTION.md). -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"
+    android:width="24dp" android:height="24dp" android:viewportWidth="960" android:viewportHeight="960"
     android:autoMirrored="false">
-    <path android:fillColor="@android:color/white" android:pathData="M11.99,18.54l-7.37,-5.73L3,14.07l9,7 9,-7 -1.63,-1.27 -7.38,5.74zM12,16l7.36,-5.73L21,9l-9,-7 -9,7 1.63,1.27L12,16z" />
+    <group android:translateY="960">
+        <path android:fillColor="@android:color/white" android:pathData="M161-366q-16-12-15.5-31.5T162-429q11-8 24-8t24 8l270 209 270-209q11-8 24-8t24 8q16 12 16.5 31.5T799-366L529-156q-22 17-49 17t-49-17L161-366Zm270 8L201-537q-31-24-31-63t31-63l230-179q22-17 49-17t49 17l230 179q31 24 31 63t-31 63L529-358q-22 17-49 17t-49-17Zm49-64 230-178-230-178-230 178 230 178Zm0-178Z" />
+    </group>
 </vector>

@@ -20,9 +20,6 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.DropdownMenuItem
@@ -105,7 +102,7 @@ internal fun CraftSection(title: String, collapsed: Boolean, modifier: Modifier 
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-                Icon(Icons.Filled.ExpandMore, contentDescription = null, modifier = Modifier.rotate(turn))
+                Icon(Symbols.ExpandMore, contentDescription = null, modifier = Modifier.rotate(turn))
             }
             AnimatedVisibility(expanded, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
                 Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -261,7 +258,7 @@ internal fun CraftToggle(node: Node.Toggle, panel: String, send: (Edit) -> Unit,
             onCheckedChange = null,
             enabled = node.enabled,
             thumbContent = if (node.value) {
-                { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(SwitchDefaults.IconSize)) }
+                { Icon(Symbols.Check, contentDescription = null, modifier = Modifier.size(SwitchDefaults.IconSize)) }
             } else {
                 null
             },
@@ -311,7 +308,7 @@ private fun ConnectedChoice(options: List<ChoiceOption>, value: String, enabled:
                     else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
                 },
                 icon = if (selected) {
-                    { Icon(Icons.Filled.Check, contentDescription = null) }
+                    { Icon(Symbols.Check, contentDescription = null) }
                 } else {
                     null
                 },
@@ -354,7 +351,7 @@ private fun ChoiceMenu(node: Node.Choice, pick: (String) -> Unit, modifier: Modi
                         expanded = false
                         pick(option.id)
                     },
-                    leadingIcon = { if (option.id == node.value) Icon(Icons.Filled.Check, contentDescription = "Chosen") else Spacer(Modifier.size(24.dp)) },
+                    leadingIcon = { if (option.id == node.value) Icon(Symbols.Check, contentDescription = "Chosen") else Spacer(Modifier.size(24.dp)) },
                     contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
                 )
             }

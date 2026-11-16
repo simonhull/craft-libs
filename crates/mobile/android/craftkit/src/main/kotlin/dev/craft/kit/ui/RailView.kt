@@ -20,9 +20,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -121,7 +118,7 @@ fun CraftRail(
             Box {
                 CraftTooltip("Tool Options", position = TipSide.End) {
                     IconButton(onClick = { open(route) }, modifier = Modifier.size(SLOT)) {
-                        Icon(Icons.Outlined.Tune, contentDescription = "Tool Options")
+                        Icon(Symbols.Tune, contentDescription = "Tool Options")
                     }
                 }
                 optionsPanel?.let { id -> CraftPopover(PopoverSide.End, onDismiss = { onOptionsPanel(null) }) { optionsContent(id) } }
@@ -218,7 +215,7 @@ private fun RailSlot(slot: ToolSlot, tool: Tool, selected: String, tap: (String)
                             other.shortcut?.let(Shortcut::parse)?.let { Text(it.label, style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant) }
                             if (other.id == selected) {
                                 Spacer(Modifier.width(8.dp))
-                                Icon(Icons.Filled.Check, contentDescription = "Selected", modifier = Modifier.size(18.dp))
+                                Icon(Symbols.Check, contentDescription = "Selected", modifier = Modifier.size(18.dp))
                             }
                         }
                     },

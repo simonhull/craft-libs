@@ -15,13 +15,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.NavigateBefore
-import androidx.compose.material.icons.automirrored.filled.NavigateNext
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.SkipNext
-import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.material3.Icon
@@ -125,11 +118,11 @@ fun CraftTransport(transport: Transport, panel: String, send: (Edit) -> Unit, mo
 private fun TransportButtons(transport: Transport, press: (TransportAction) -> Unit) {
     val enabled = transport.enabled
     Row(verticalAlignment = Alignment.CenterVertically) {
-        TransportButton(Icons.Filled.SkipPrevious, "Go to Start", enabled) { press(TransportAction.ToStart) }
-        TransportButton(Icons.AutoMirrored.Filled.NavigateBefore, "Step Back", enabled) { press(TransportAction.StepBack) }
+        TransportButton(Symbols.SkipPreviousFilled, "Go to Start", enabled) { press(TransportAction.ToStart) }
+        TransportButton(Symbols.NavigateBefore, "Step Back", enabled) { press(TransportAction.StepBack) }
         PlayPause(transport.playing, enabled) { press(if (transport.playing) TransportAction.Pause else TransportAction.Play) }
-        TransportButton(Icons.AutoMirrored.Filled.NavigateNext, "Step Forward", enabled) { press(TransportAction.StepForward) }
-        TransportButton(Icons.Filled.SkipNext, "Go to End", enabled) { press(TransportAction.ToEnd) }
+        TransportButton(Symbols.NavigateNext, "Step Forward", enabled) { press(TransportAction.StepForward) }
+        TransportButton(Symbols.SkipNextFilled, "Go to End", enabled) { press(TransportAction.ToEnd) }
     }
 }
 
@@ -156,7 +149,7 @@ private fun PlayPauseButton(playing: Boolean, enabled: Boolean, onClick: () -> U
         modifier = Modifier.padding(horizontal = 4.dp).size(IconButtonDefaults.mediumContainerSize()),
     ) {
         Icon(
-            if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+            if (playing) Symbols.PauseFilled else Symbols.PlayArrowFilled,
             contentDescription = if (playing) "Pause" else "Play",
             modifier = Modifier.size(IconButtonDefaults.mediumIconSize),
         )

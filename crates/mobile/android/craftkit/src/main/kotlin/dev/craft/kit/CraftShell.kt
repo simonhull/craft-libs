@@ -18,8 +18,6 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -66,6 +64,7 @@ import dev.craft.kit.ui.CraftUi
 import dev.craft.kit.ui.PanelInfo
 import dev.craft.kit.ui.PanelRole
 import dev.craft.kit.ui.PopoverSide
+import dev.craft.kit.ui.Symbols
 import dev.craft.kit.ui.firstTransport
 import dev.craft.kit.ui.toolPalette
 import kotlin.coroutines.cancellation.CancellationException
@@ -206,7 +205,7 @@ private fun PanelSheetContent(ui: CraftUi, info: PanelInfo, close: (() -> Unit)?
     Column(modifier) {
         Row(Modifier.fillMaxWidth().padding(start = 24.dp, end = 8.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(info.title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-            close?.let { IconButton(onClick = it) { Icon(Icons.Filled.Close, contentDescription = "Close ${info.title}") } }
+            close?.let { IconButton(onClick = it) { Icon(Symbols.Close, contentDescription = "Close ${info.title}") } }
         }
         // Another panel is another view: none of this one's state (a drag, a collapsed section) carries over.
         key(info.id) { CraftPanelHost(ui, info.id) }
