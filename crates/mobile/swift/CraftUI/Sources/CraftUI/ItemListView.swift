@@ -1,10 +1,10 @@
 import SwiftUI
 
 /// Rows of items such as layers: tap to select, swipe or tap the eye to hide, long-press to rename
-/// (unless the row says it can't be) or for the row's own actions (a destructive one is a swipe too), drag to reorder (when `reorderable`). Select (in the header) picks several rows, a tap adding or
+/// (unless the row says it can't be) or for the row's own actions (a destructive one is a swipe too), drag to reorder (when `reorderable`). Select (under the list) picks several rows, a tap adding or
 /// removing each, until Done; with a hardware keyboard, Command-tap does the same and Shift-tap
-/// selects a range. Selected rows are tinted. The list's own actions (New Layer) are a row of icon
-/// buttons in its footer, as a layers panel's.
+/// selects a range. Selected rows are tinted. Select and the list's own actions (New Layer, as icon
+/// buttons) share one row under the list, as a layers panel's.
 struct CraftItemListView: View {
     let id: String
     let rows: [CraftRow]
@@ -24,20 +24,8 @@ struct CraftItemListView: View {
                 rowView(row)
             }
             .onMove(perform: reorderable ? { source, destination in move(from: source, to: destination) } : nil)
-        } header: {
-            if rows.count > 1 {
-                HStack {
-                    Spacer()
-                    Button(multiSelecting ? "Done" : "Select") {
-                        withAnimation { multiSelecting.toggle() }
-                    }
-                    .font(.subheadline.weight(multiSelecting ? .semibold : .regular))
-                    .textCase(nil)
-                    .accessibilityHint(multiSelecting ? "Stop picking rows" : "Pick several rows")
-                }
-            }
         } footer: {
-            if !actions.isEmpty {
+            if rows.count > 1 || !actions.isEmpty {
                 footer
             }
         }
@@ -56,24 +44,29 @@ struct CraftItemListView: View {
                     .accessibilityHidden(true)
             }
             if let visible = row.visible {
+                // Neutral, as the row's text: an accent eye on every row reads as a selection.
                 Button { one(.setVisible(row: row.id, visible: !visible)) } label: {
                     Image(systemName: visible ? "eye" : "eye.slash")
-                        .foregroundStyle(visible ? .primary : .secondary)
+                        .font(.body.weight(.medium))
+                        .frame(minWidth: 32, minHeight: 44)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.borderless)
+                .tint(visible ? .primary : .secondary)
             }
-            VStack(alignment: .leading) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(row.title)
                 if !row.subtitle.isEmpty {
-                    Text(row.subtitle).font(.caption).foregroundStyle(.secondary)
+                    Text(row.subtitle).font(.subheadline).foregroundStyle(.craftSecondaryText)
                 }
             }
             .padding(.leading, CGFloat(row.depth) * 16)
             Spacer()
         }
+        .frame(minHeight: 44)
         .contentShape(Rectangle())
         .modifiedTap { select(row, modifiers: $0) }
-        .listRowBackground(row.selected ? Color.accentColor.opacity(0.18) : nil)
+        .listRowBackground(row.selected ? Color.accentColor.opacity(0.25) : nil)
         .swipeActions(edge: .trailing) {
             // The first is the full swipe's: a destructive action is never run by a swipe alone.
             if let visible = row.visible {
@@ -102,31 +95,48 @@ struct CraftItemListView: View {
             act: { one(.action(row: row.id, action: $0.id)) }))
     }
 
-    /// The list's own actions: compact icon buttons, trailing, each a full 44 pt target.
+    /// Under the list: Select (when there are rows to pick) leading, and the list's own actions
+    /// trailing, as bordered buttons in the label's colour (the accent as text on the grouped
+    /// background is under 4.5:1), each a 44 pt target.
     private var footer: some View {
-        HStack(spacing: 0) {
-            Spacer()
+        HStack(spacing: 8) {
+            if rows.count > 1 {
+                Button {
+                    withAnimation { multiSelecting.toggle() }
+                } label: {
+                    Text(multiSelecting ? "Done" : "Select")
+                        .font(.body.weight(multiSelecting ? .semibold : .medium))
+                        .padding(.horizontal, 4)
+                        .frame(minHeight: 30)
+                }
+                .buttonStyle(.bordered)
+                // A colour: in a footer, `.primary` is the faint level.
+                .tint(Color.primary)
+                .accessibilityHint(multiSelecting ? "Stop picking rows" : "Pick several rows")
+            }
+            Spacer(minLength: 0)
             ForEach(actions) { action in
                 Button {
                     send(Self.listActionEdit(action, panel: panel, control: id))
                 } label: {
                     Group {
                         if let icon = action.icon {
-                            Image(systemName: icon).imageScale(.large)
+                            Image(systemName: icon).font(.body.weight(.medium))
                         } else {
-                            Text(action.label).font(.subheadline)
+                            Text(action.label).font(.body.weight(.medium))
                         }
                     }
-                    .frame(minWidth: 44, minHeight: 44)
-                    .contentShape(Rectangle())
+                    .frame(minWidth: 30, minHeight: 30)
                 }
-                .buttonStyle(.borderless)
-                .foregroundStyle(action.destructive ? AnyShapeStyle(.red) : AnyShapeStyle(.tint))
+                .buttonStyle(.bordered)
+                .buttonBorderShape(action.icon == nil ? .capsule : .circle)
+                .tint(action.destructive ? Color.red : Color.primary)
                 .accessibilityLabel(action.label)
                 .help(action.label)
             }
         }
         .textCase(nil)
+        .padding(.top, 4)
     }
 
     /// The edit a footer button sends: one commit, in a gesture of its own.

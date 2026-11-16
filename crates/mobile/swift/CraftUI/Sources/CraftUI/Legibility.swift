@@ -29,3 +29,9 @@ struct CraftGlass<S: Shape>: ViewModifier {
             .glassEffect(glass, in: shape)
     }
 }
+
+extension ShapeStyle where Self == Color {
+    /// Secondary text that still meets 4.5:1: the label's colour, a little faded. The system's
+    /// secondary label is about 3.5:1 on white, and less on a tinted (selected) row.
+    static var craftSecondaryText: Color { Color.primary.opacity(0.72) }
+}
