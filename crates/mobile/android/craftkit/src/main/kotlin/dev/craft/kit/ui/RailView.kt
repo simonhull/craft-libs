@@ -160,7 +160,7 @@ private val SPACING = 4.dp
 
 /**
  * One slot: its shown tool, a rounded square while selected and a circle otherwise; a slot with more
- * tools opens its flyout on a long press, and says so with a dot.
+ * tools opens its flyout on a long press (or a right-click), and says so with a dot.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -182,6 +182,7 @@ private fun RailSlot(slot: ToolSlot, tool: Tool, selected: String, tap: (String)
                     // The ripple keeps to the slot's shape.
                     .clip(RoundedCornerShape(corner))
                     .background(container)
+                    .then(if (more) Modifier.onSecondaryClick { flyout = true } else Modifier)
                     .combinedClickable(
                         role = Role.Button,
                         onLongClickLabel = if (more) "More tools" else null,

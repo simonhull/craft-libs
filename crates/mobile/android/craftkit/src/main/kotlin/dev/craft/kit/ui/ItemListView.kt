@@ -287,7 +287,7 @@ private fun SwipeButton(label: String, container: Color, content: Color, onClick
     }
 }
 
-/** One row: selected rows in secondary container with rounder corners; long-press for its menu. */
+/** One row: selected rows in secondary container with rounder corners; long-press (or right-click) for its menu. */
 @OptIn(ExperimentalFoundationApi::class, ExperimentalComposeUiApi::class)
 @Composable
 private fun RowContent(
@@ -318,6 +318,7 @@ private fun RowContent(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 56.dp)
+                .onSecondaryClick { menu = true }
                 .combinedClickable(
                     role = Role.Button,
                     onLongClickLabel = "Row actions",
