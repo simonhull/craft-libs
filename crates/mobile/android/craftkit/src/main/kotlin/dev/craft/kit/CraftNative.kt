@@ -21,7 +21,10 @@ object CraftNative {
          * location ([text]: the location, a line break, the file name), answered with [writeDone];
          * 9: the app is busy ([text] `1`) with work that must finish even in the background, or done (`0`);
          * 10: the user asked to paste: read the clipboard and answer with [pasteText], [pasteImage] or [pasteOwn];
-         * 11: share [data] ([text]: its file name) through the share sheet; 12: show the Photo Picker.
+         * 11: share [data] ([text]: its file name) through the share sheet; 12: show the Photo Picker;
+         * 13: the native panels ([text]: JSON); 14: open a panel ([text]: its id); 15: the menus ([text]: JSON);
+         * 16: the status ([text]: JSON); 17: transports' live positions ([text]: JSON). See craft-mobile's
+         * `catalogue/ui.md` for 13 to 17, which [dev.craft.kit.ui.CraftUi] reads.
          */
         fun onRequest(kind: Int, text: String, data: ByteArray?)
     }

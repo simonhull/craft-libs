@@ -26,6 +26,7 @@ import android.widget.Toast
 import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import dev.craft.kit.ui.CraftUi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -82,6 +83,12 @@ class CraftHost(context: Context, library: String) : CraftNative.Handler {
 
     /** The app's panel state, updated whenever it changes. */
     val snapshot: StateFlow<Snapshot> = state.asStateFlow()
+
+    /**
+     * The app's native chrome (wire kinds 13 to 17): its panels, menus, status and live positions,
+     * and the way back for edits and commands. [CraftScaffold] shows it.
+     */
+    val ui = CraftUi { json -> CraftNative.action(json) }
 
     /** Pickers and exporters to show, in order; [CraftCanvas] shows them. */
     internal val fileRequests = Channel<FileRequest>(Channel.UNLIMITED)
@@ -207,9 +214,15 @@ class CraftHost(context: Context, library: String) : CraftNative.Handler {
             10 -> scope.launch { paste() }
             11 -> fileRequests.trySend(FileRequest.Share(text, FileTypes.mimeOfName(text), data ?: ByteArray(0)))
             12 -> fileRequests.trySend(FileRequest.PickPhotos)
+            // Decoded here, applied on the main thread, in order.
+            in CraftUi.kinds -> CraftUi.decode(kind, text)?.let { request -> scope.launch { ui.receive(request) } }
+                ?: Log.w(TAG, "request $kind didn't decode; the shell keeps what it had")
             else -> Log.w(TAG, "unknown request $kind")
         }
     }
+
+    /** The canvas started the app (or moved it to a new surface): it hears what the shell draws and which panels are on screen. */
+    internal fun started() = ui.started()
 
     /** The app left the screen (`onStop`): it writes recovery copies of unsaved work before this returns. */
     fun suspend() = CraftNative.suspend()

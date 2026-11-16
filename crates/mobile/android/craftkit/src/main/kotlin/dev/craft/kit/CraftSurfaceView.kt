@@ -48,6 +48,8 @@ internal class CraftSurfaceView(context: Context, private val host: CraftHost) :
             CraftNative.resize(width, height, density)
         } else {
             drawing = CraftNative.start(holder.surface, width, height, density)
+            // After the start in the render thread's queue: the app is there to hear it.
+            if (drawing) host.started()
         }
     }
 
