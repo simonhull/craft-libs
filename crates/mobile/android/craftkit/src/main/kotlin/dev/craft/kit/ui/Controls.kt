@@ -59,7 +59,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -122,7 +124,8 @@ internal fun CraftSection(title: String, collapsed: Boolean, modifier: Modifier 
  *
  * A drag sends `begin`, `change` for each new value, then `commit`; a typed value is one `commit`.
  * Nothing is sent while the app's value is shown: the app's description changes the slider, never an edit.
- * Disabled, the track still fills to the value, in the disabled colours.
+ * Disabled, the track still fills to the value, in the disabled colours. A tick is felt at either
+ * end, and at each step of a number with few ([NumberMath.MAX_DETENTS] or fewer).
  */
 @OptIn(ExperimentalMaterial3Api::class) // The value label over the thumb.
 @Composable
@@ -164,6 +167,7 @@ internal fun CraftNumber(node: Node.Number, panel: String, send: (Edit) -> Unit,
             }
         }
         val range = node.range
+        val haptics = LocalHapticFeedback.current
         val state = remember { SliderState() }
         state.value = NumberMath.position(shown, range, node.scale).toFloat()
         // The thumb hears the slider's own presses and drags.
@@ -172,6 +176,11 @@ internal fun CraftNumber(node: Node.Number, panel: String, send: (Edit) -> Unit,
             state = state,
             onValueChange = { t ->
                 val new = NumberMath.snap(NumberMath.valueAt(t.toDouble(), range, node.scale), node.step, range)
+                when (NumberMath.tick(hold.shown(node.value), new, node.step, range)) {
+                    NumberMath.Tick.Edge -> haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                    NumberMath.Tick.Detent -> haptics.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
+                    NumberMath.Tick.None -> Unit
+                }
                 hold.slide(new, node.value).forEach(emit)
             },
             onValueChangeFinished = { hold.commit()?.let(emit) },
@@ -230,15 +239,19 @@ private fun unitSuffix(unit: NumberUnit): String? = when (unit) {
     NumberUnit.None -> null
 }
 
-/** On or off: a switch with a check in its thumb; the whole row toggles it. Sends one `commit`. */
+/** On or off: a switch with a check in its thumb; the whole row toggles it, with the toggle haptic. Sends one `commit`. */
 @Composable
 internal fun CraftToggle(node: Node.Toggle, panel: String, send: (Edit) -> Unit, modifier: Modifier = Modifier) {
+    val haptics = LocalHapticFeedback.current
     Row(
         modifier
             .fillMaxWidth()
             .heightIn(min = 48.dp)
             .toggleable(node.value, enabled = node.enabled, role = Role.Switch) { new ->
-                if (new != node.value) send(Edit.commit(panel, node.id, EditValue.Toggle(new)))
+                if (new != node.value) {
+                    haptics.performHapticFeedback(if (new) HapticFeedbackType.ToggleOn else HapticFeedbackType.ToggleOff)
+                    send(Edit.commit(panel, node.id, EditValue.Toggle(new)))
+                }
             },
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -258,12 +271,18 @@ internal fun CraftToggle(node: Node.Toggle, panel: String, send: (Edit) -> Unit,
 
 /**
  * One of several options: Material 3's connected button group for up to four (the chosen one
- * rounds fully and shows a check), an exposed dropdown menu for more. Picking the current option
- * sends nothing.
+ * rounds fully and shows a check), an exposed dropdown menu for more. A new pick ticks; picking
+ * the current option sends nothing.
  */
 @Composable
 internal fun CraftChoice(node: Node.Choice, panel: String, send: (Edit) -> Unit, modifier: Modifier = Modifier) {
-    val pick = { option: String -> if (option != node.value) send(Edit.commit(panel, node.id, EditValue.Choice(option))) }
+    val haptics = LocalHapticFeedback.current
+    val pick = { option: String ->
+        if (option != node.value) {
+            haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+            send(Edit.commit(panel, node.id, EditValue.Choice(option)))
+        }
+    }
     if (node.options.size <= MAX_SEGMENTS) {
         Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(node.label, style = labelStyle, modifier = Modifier.alpha(if (node.enabled) 1f else DISABLED_ALPHA))

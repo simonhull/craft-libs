@@ -19,6 +19,24 @@ object NumberMath {
         return snapped.coerceIn(range.start, range.endInclusive)
     }
 
+    /** What a slider's move from [from] to [to] says under the finger. */
+    enum class Tick { None, Detent, Edge }
+
+    /**
+     * The haptic tick for a slider moving from [from] to [to]: [Tick.Edge] on arriving at an end of
+     * [range]; [Tick.Detent] on each new value of a number with few enough steps to feel one by one
+     * ([MAX_DETENTS] or fewer); otherwise nothing, so a fine range doesn't buzz.
+     */
+    fun tick(from: Double, to: Double, step: Double?, range: ClosedFloatingPointRange<Double>): Tick {
+        if (to == from) return Tick.None
+        if (to == range.start || to == range.endInclusive) return Tick.Edge
+        val detents = step?.takeIf { it.isFinite() && it > 0 }?.let { (range.endInclusive - range.start) / it } ?: return Tick.None
+        return if (detents <= MAX_DETENTS) Tick.Detent else Tick.None
+    }
+
+    /** The most steps a slider ticks through one by one. */
+    const val MAX_DETENTS = 50
+
     /**
      * Where [v] sits on the slider, 0..1. On a log scale `v = min·(max/min)^t`; a range a log scale
      * can't spread (`min <= 0`) is linear; an empty range is 0.

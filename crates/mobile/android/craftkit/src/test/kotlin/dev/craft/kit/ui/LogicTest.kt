@@ -229,6 +229,17 @@ class RailTest {
 }
 
 class NumberMathTest {
+    @Test
+    fun aSliderTicksAtItsEndsAndThroughFewStepsOnly() {
+        val percent = 0.0..100.0
+        assertEquals(NumberMath.Tick.Edge, NumberMath.tick(99.0, 100.0, step = 1.0, range = percent))
+        assertEquals(NumberMath.Tick.Edge, NumberMath.tick(3.0, 0.0, step = null, range = percent))
+        assertEquals("100 steps are too many to feel one by one", NumberMath.Tick.None, NumberMath.tick(40.0, 41.0, step = 1.0, range = percent))
+        assertEquals(NumberMath.Tick.Detent, NumberMath.tick(40.0, 50.0, step = 10.0, range = percent))
+        assertEquals("continuous: only the ends", NumberMath.Tick.None, NumberMath.tick(40.0, 41.5, step = null, range = percent))
+        assertEquals("no move, no tick", NumberMath.Tick.None, NumberMath.tick(100.0, 100.0, step = 1.0, range = percent))
+    }
+
     private val log = 1.0..5000.0
 
     @Test

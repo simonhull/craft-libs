@@ -65,12 +65,14 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.isCtrlPressed
 import androidx.compose.ui.input.pointer.isMetaPressed
 import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
@@ -103,6 +105,7 @@ internal fun CraftItemList(node: Node.ItemList, panel: String, send: (Edit) -> U
     var renaming by remember { mutableStateOf<Row?>(null) }
     val one = { value: EditValue -> send(Edit.commit(panel, node.id, value)) }
     val reorder = remember { Reorder() }
+    val haptics = LocalHapticFeedback.current
 
     Column(modifier.fillMaxWidth()) {
         if (node.rows.size > 1) {
@@ -134,13 +137,20 @@ internal fun CraftItemList(node: Node.ItemList, panel: String, send: (Edit) -> U
                             startRenaming = { renaming = row },
                             select = { mode -> one(EditValue.Select(row.id, mode)) },
                             handle = Modifier.pointerInput(row.id, index, node.rows) {
+                                // Felt: the row lifting, each place it passes, and the drop.
                                 detectDragGestures(
-                                    onDragStart = { reorder.start(index) },
+                                    onDragStart = {
+                                        haptics.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+                                        reorder.start(index)
+                                    },
                                     onDrag = { change, amount ->
                                         change.consume()
-                                        reorder.drag(amount.y, node.rows.size)
+                                        if (reorder.drag(amount.y, node.rows.size)) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                     },
-                                    onDragEnd = { reorder.end()?.let { to -> ItemLists.moveEdit(node.rows, index, to)?.let(one) } },
+                                    onDragEnd = {
+                                        haptics.performHapticFeedback(HapticFeedbackType.GestureEnd)
+                                        reorder.end()?.let { to -> ItemLists.moveEdit(node.rows, index, to)?.let(one) }
+                                    },
                                     onDragCancel = { reorder.cancel() },
                                 )
                             },
@@ -177,11 +187,14 @@ private class Reorder {
         offset = 0f
     }
 
-    fun drag(dy: Float, count: Int) {
-        if (from < 0) return
+    /** The finger moved [dy]; `true` if the row now lands in another place. */
+    fun drag(dy: Float, count: Int): Boolean {
+        if (from < 0) return false
         offset += dy
-        val height = heights[from]?.takeIf { it > 0 } ?: return
+        val height = heights[from]?.takeIf { it > 0 } ?: return false
+        val before = to
         to = (from + (offset / height).roundToInt()).coerceIn(0, count - 1)
+        return to != before
     }
 
     /** The drop: the index in the list before the move where the row lands; `null` without a drag. */
