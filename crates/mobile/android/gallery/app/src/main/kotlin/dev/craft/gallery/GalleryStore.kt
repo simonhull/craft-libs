@@ -90,11 +90,20 @@ class GalleryStore(catalogue: String, private val scope: CoroutineScope) {
 
     private fun JsonObject.text(key: String) = getValue(key).jsonPrimitive.content
 
-    /** One primitive's example as a panel of its own. */
-    fun panel(entry: Entry, role: PanelRole) = Panel(entry.name, entry.name, role, listOf(entry.example))
+    /** One primitive's example as a panel of its own, with its disabled look where that differs. */
+    fun panel(entry: Entry, role: PanelRole) = Panel(entry.name, entry.name, role, listOf(entry.example) + disabled(entry.example))
 
     /** Every example in one panel, as an app's inspector would hold them. */
-    fun everything(role: PanelRole) = Panel(EVERYTHING, "Everything", role, entries.map { it.example })
+    fun everything(role: PanelRole) = Panel(EVERYTHING, "Everything", role, entries.flatMap { listOf(it.example) + disabled(it.example) })
+
+    /**
+     * A disabled copy of a number at its maximum, as an app shows a locked layer's opacity at 100 %:
+     * its track must still read full, not empty.
+     */
+    private fun disabled(example: Node): List<Node> = when (example) {
+        is Node.Number -> listOf(example.copy(id = "${example.id}.disabled", label = "${example.label} (disabled)", value = example.range.endInclusive, enabled = false))
+        else -> emptyList()
+    }
 
     /** The first tool palette among the examples, for the Gallery's rail. */
     val palette: ToolPalette? get() = entries.firstNotNullOfOrNull { it.example as? ToolPalette }
