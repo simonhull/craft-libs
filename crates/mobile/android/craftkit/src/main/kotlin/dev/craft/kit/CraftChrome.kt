@@ -68,6 +68,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.craft.kit.ui.CraftMenuBar
 import dev.craft.kit.ui.CraftStatusOverlay
+import dev.craft.kit.ui.CraftTooltip
 import dev.craft.kit.ui.Feature
 import dev.craft.kit.ui.ProvideCraftUi
 
@@ -223,8 +224,11 @@ fun CraftToolbar(
                 ToolbarButton(R.drawable.craft_ic_undo, "Undo", enabled = snapshot.canUndo) { host.perform(CraftAction.Undo) }
                 ToolbarButton(R.drawable.craft_ic_redo, "Redo", enabled = snapshot.canRedo) { host.perform(CraftAction.Redo) }
                 VerticalDivider(Modifier.height(24.dp).padding(horizontal = 8.dp))
-                IconToggleButton(checked = itemsShown, onCheckedChange = onItemsShownChange) {
-                    Icon(painterResource(R.drawable.craft_ic_layers), contentDescription = snapshot.itemsTitle.ifEmpty { "Items" })
+                val itemsTitle = snapshot.itemsTitle.ifEmpty { "Items" }
+                CraftTooltip(itemsTitle) {
+                    IconToggleButton(checked = itemsShown, onCheckedChange = onItemsShownChange) {
+                        Icon(painterResource(R.drawable.craft_ic_layers), contentDescription = itemsTitle)
+                    }
                 }
             }
             Spacer(Modifier.width(8.dp))
@@ -232,10 +236,10 @@ fun CraftToolbar(
     )
 }
 
-/** An app bar button with an icon from [icon] (craftkit's `craft_ic_*` or the app's own). */
+/** An app bar button with an icon from [icon] (craftkit's `craft_ic_*` or the app's own), its label in a tooltip. */
 @Composable
 fun ToolbarButton(icon: Int, label: String, enabled: Boolean = true, onClick: () -> Unit) {
-    IconButton(onClick = onClick, enabled = enabled) { Icon(painterResource(icon), contentDescription = label) }
+    CraftTooltip(label) { IconButton(onClick = onClick, enabled = enabled) { Icon(painterResource(icon), contentDescription = label) } }
 }
 
 /** The active document's items (layers, tracks, pages): select one, show or hide it. */

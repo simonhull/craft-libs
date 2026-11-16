@@ -135,12 +135,17 @@ private fun TransportButtons(transport: Transport, press: (TransportAction) -> U
 
 @Composable
 private fun TransportButton(icon: ImageVector, label: String, enabled: Boolean, onClick: () -> Unit) {
-    IconButton(onClick = onClick, enabled = enabled) { Icon(icon, contentDescription = label) }
+    CraftTooltip(label, position = TipSide.Above) { IconButton(onClick = onClick, enabled = enabled) { Icon(icon, contentDescription = label) } }
 }
 
 /** Play and Pause as one medium filled icon button whose shape morphs: round while paused, a rounded square while playing. */
 @Composable
 private fun PlayPause(playing: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    CraftTooltip(if (playing) "Pause" else "Play", position = TipSide.Above) { PlayPauseButton(playing, enabled, onClick) }
+}
+
+@Composable
+private fun PlayPauseButton(playing: Boolean, enabled: Boolean, onClick: () -> Unit) {
     FilledIconButton(
         onClick = onClick,
         enabled = enabled,

@@ -54,6 +54,7 @@ import dev.craft.kit.ui.CraftIcons
 import dev.craft.kit.ui.CraftPanelHost
 import dev.craft.kit.ui.CraftPopover
 import dev.craft.kit.ui.CraftRail
+import dev.craft.kit.ui.CraftTooltip
 import dev.craft.kit.ui.CraftTransport
 import dev.craft.kit.ui.CraftUi
 import dev.craft.kit.ui.PanelInfo
@@ -180,12 +181,14 @@ internal fun PanelButtons(ui: CraftUi, shell: NativeChrome, layout: ChromeLayout
 
 @Composable
 private fun PanelButton(info: PanelInfo, open: Boolean, onOpenChange: (Boolean) -> Unit) {
-    IconToggleButton(checked = open, onCheckedChange = onOpenChange, modifier = Modifier.semantics { contentDescription = info.accessibilityName }) {
-        val icon = CraftIcons.icon(info.icon, filled = open)
-        if (icon != null) {
-            Icon(icon, contentDescription = null)
-        } else {
-            Text(info.accessibilityName.take(1).uppercase(), fontWeight = FontWeight.SemiBold)
+    CraftTooltip(info.accessibilityName) {
+        IconToggleButton(checked = open, onCheckedChange = onOpenChange, modifier = Modifier.semantics { contentDescription = info.accessibilityName }) {
+            val icon = CraftIcons.icon(info.icon, filled = open)
+            if (icon != null) {
+                Icon(icon, contentDescription = null)
+            } else {
+                Text(info.accessibilityName.take(1).uppercase(), fontWeight = FontWeight.SemiBold)
+            }
         }
     }
 }

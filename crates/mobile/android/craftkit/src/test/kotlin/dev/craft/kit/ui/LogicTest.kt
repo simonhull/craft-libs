@@ -386,3 +386,12 @@ class CraftUiTest {
         assertNotEquals("asking twice is two requests", first, ui.openRequest)
     }
 }
+
+class TooltipTextTest {
+    @Test
+    fun aTooltipNamesTheShortcutAfterTheLabelWhereThereIsOne() {
+        assertEquals("Brush  B", tooltipText("Brush", "B"))
+        assertEquals("Tool Options", tooltipText("Tool Options", null))
+        assertEquals("Tool Options", tooltipText("Tool Options", ""))
+    }
+}

@@ -40,6 +40,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -118,8 +119,10 @@ fun CraftRail(
     val options = @Composable {
         palette.optionsRoute?.let { route ->
             Box {
-                IconButton(onClick = { open(route) }, modifier = Modifier.size(SLOT)) {
-                    Icon(Icons.Outlined.Tune, contentDescription = "Tool Options")
+                CraftTooltip("Tool Options", position = TipSide.End) {
+                    IconButton(onClick = { open(route) }, modifier = Modifier.size(SLOT)) {
+                        Icon(Icons.Outlined.Tune, contentDescription = "Tool Options")
+                    }
                 }
                 optionsPanel?.let { id -> CraftPopover(PopoverSide.End, onDismiss = { onOptionsPanel(null) }) { optionsContent(id) } }
             }
@@ -166,36 +169,41 @@ private fun RailSlot(slot: ToolSlot, tool: Tool, selected: String, tap: (String)
     val more = slot.tools.size > 1
     var flyout by remember { mutableStateOf(false) }
     val colors = MaterialTheme.colorScheme
-    val corner by animateDpAsState(if (isSelected) 16.dp else SLOT / 2, label = "corner")
+    val corner by animateDpAsState(if (isSelected) 16.dp else SLOT / 2, MaterialTheme.motionScheme.fastSpatialSpec(), label = "corner")
     val container by animateColorAsState(if (isSelected) colors.primaryContainer else Color.Transparent, label = "container")
     val content = if (isSelected) colors.onPrimaryContainer else colors.onSurfaceVariant
     val shortcut = tool.shortcut?.let(Shortcut::parse)?.label
     Box {
-        Box(
-            Modifier
-                .size(SLOT)
-                .background(container, RoundedCornerShape(corner))
-                .combinedClickable(
-                    role = Role.Button,
-                    onLongClickLabel = if (more) "More tools" else null,
-                    onLongClick = if (more) ({ flyout = true }) else null,
-                ) { tap(tool.id) }
-                .semantics {
-                    contentDescription = shortcut?.let { "${tool.label}, shortcut $it" } ?: tool.label
-                    this.selected = isSelected
-                    if (more) customActions = listOf(CustomAccessibilityAction("More tools") { flyout = true; true })
-                },
-            contentAlignment = Alignment.Center,
-        ) {
-            ToolFace(tool, filled = isSelected, tint = content)
-            if (more) {
-                Box(
-                    Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(7.dp)
-                        .size(4.dp)
-                        .background(content.copy(alpha = 0.8f), CircleShape),
-                )
+        // Its name and shortcut on hover, or a long press where that doesn't open the flyout.
+        CraftTooltip(tool.label, shortcut = shortcut, position = TipSide.End, longPressFree = !more) {
+            Box(
+                Modifier
+                    .size(SLOT)
+                    // The ripple keeps to the slot's shape.
+                    .clip(RoundedCornerShape(corner))
+                    .background(container)
+                    .combinedClickable(
+                        role = Role.Button,
+                        onLongClickLabel = if (more) "More tools" else null,
+                        onLongClick = if (more) ({ flyout = true }) else null,
+                    ) { tap(tool.id) }
+                    .semantics {
+                        contentDescription = shortcut?.let { "${tool.label}, shortcut $it" } ?: tool.label
+                        this.selected = isSelected
+                        if (more) customActions = listOf(CustomAccessibilityAction("More tools") { flyout = true; true })
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                ToolFace(tool, filled = isSelected, tint = content)
+                if (more) {
+                    Box(
+                        Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(7.dp)
+                            .size(4.dp)
+                            .background(content.copy(alpha = 0.8f), CircleShape),
+                    )
+                }
             }
         }
         // Beside the rail, level with the slot.
