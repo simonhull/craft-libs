@@ -167,7 +167,7 @@ private fun PanelDetail(store: GalleryStore, title: String, about: String, panel
                     Box {
                         IconToggleButton(checked = popover, onCheckedChange = { popover = it }) { Icon(Symbols.PictureInPicture, contentDescription = "Popover") }
                         if (popover) {
-                            CraftPopover(PopoverSide.Below, onDismiss = { popover = false }) { CraftPanelView(panel(PanelRole.Tool), store::send) }
+                            CraftPopover(PopoverSide.Below, onDismiss = { popover = false }, title = title) { CraftPanelView(panel(PanelRole.Tool), store::send) }
                         }
                     }
                     IconToggleButton(checked = inspector, onCheckedChange = { inspector = it }) { Icon(Symbols.ViewSidebar, contentDescription = "Inspector") }
@@ -210,12 +210,16 @@ private fun Log(store: GalleryStore, about: String, modifier: Modifier = Modifie
 private fun GalleryRail(store: GalleryStore, modifier: Modifier) {
     val palette = store.palette ?: return
     var options by remember { mutableStateOf<String?>(null) }
-    CraftRail(palette, GalleryStore.TOOLS, store::send, command = store::command, optionsPanel = options, onOptionsPanel = { options = it }, modifier = modifier) { id ->
-        Column {
-            Text(id.replaceFirstChar(Char::uppercase), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = 24.dp, top = 20.dp))
-            CraftPanelView(store.optionsPanel(id), store::send)
-        }
-    }
+    CraftRail(
+        palette,
+        GalleryStore.TOOLS,
+        store::send,
+        command = store::command,
+        optionsPanel = options,
+        onOptionsPanel = { options = it },
+        modifier = modifier,
+        optionsTitle = { it.replaceFirstChar(Char::uppercase) },
+    ) { id -> CraftPanelView(store.optionsPanel(id), store::send) }
 }
 
 /** The catalogue's menus in an app bar, wide and folded (as when narrow); what each item sends. */

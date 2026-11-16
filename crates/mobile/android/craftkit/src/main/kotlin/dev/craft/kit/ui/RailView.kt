@@ -58,7 +58,7 @@ import kotlinx.coroutines.flow.first
  * a panel). Tap a tool to select it (a `choice` edit, `commit`); long-press a slot with more tools
  * (marked with a dot) for its flyout; double-tap the selected tool, or the options button, for its
  * options: [onOptionsPanel] is told to show its Tool panel, which [optionsContent] draws in a popover
- * beside the button, or the fallback [command] is sent.
+ * beside the button under the title [optionsTitle] gives it, or the fallback [command] is sent.
  *
  * The selected tool is a rounded square in primary container with a filled icon; the others are
  * circles. The tools scroll when they don't fit; the options button stays.
@@ -73,6 +73,7 @@ fun CraftRail(
     onOptionsPanel: (String?) -> Unit,
     modifier: Modifier = Modifier,
     horizontal: Boolean = false,
+    optionsTitle: (String) -> String? = { null },
     optionsContent: @Composable (String) -> Unit = {},
 ) {
     val taps = remember { RailTaps() }
@@ -121,7 +122,7 @@ fun CraftRail(
                         Icon(Symbols.Tune, contentDescription = "Tool Options")
                     }
                 }
-                optionsPanel?.let { id -> CraftPopover(PopoverSide.End, onDismiss = { onOptionsPanel(null) }) { optionsContent(id) } }
+                optionsPanel?.let { id -> CraftPopover(PopoverSide.End, onDismiss = { onOptionsPanel(null) }, title = optionsTitle(id)) { optionsContent(id) } }
             }
         }
     }
