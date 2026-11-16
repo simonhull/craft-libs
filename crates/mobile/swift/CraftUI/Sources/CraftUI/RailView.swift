@@ -204,7 +204,9 @@ public struct CraftRailView<Options: View>: View {
                         .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
+                .craftHoverHighlight(in: .circle)
                 .accessibilityLabel("Tool Options")
+                .help("Tool Options")
                 .popover(isPresented: Binding(get: { optionsPanel != nil }, set: { if !$0 { optionsPanel = nil } })) {
                     if let id = optionsPanel { CraftPopover { optionsContent(id) } }
                 }
@@ -212,6 +214,8 @@ public struct CraftRailView<Options: View>: View {
         }
         .padding(6)
         .craftGlass(in: .capsule)
+        // A pick, however it came (a tap, the flyout, the tool's shortcut), is felt.
+        .sensoryFeedback(.selection, trigger: palette.selected)
         .onChange(of: palette) { _, palette in
             guard let tool = pendingOptions, palette.selected == tool else { return }
             pendingOptions = nil
@@ -353,6 +357,8 @@ struct CraftRailSlot: View {
     private func face(_ isSelected: Bool) -> some View {
         // Unselected, the glass picks the colour that reads over what's behind it.
         CraftToolFace(icon: tool.icon.shown(label: tool.label))
+            // The selected tool's symbol filled, as a selected tab's is (where it has a filled form).
+            .symbolVariant(isSelected ? .fill : .none)
             .frame(width: 44, height: 44)
             .background(isSelected ? Color.accentColor : Color.clear, in: .circle)
             // A light rim and a shadow lift the selected tool off the glass, whatever's behind it.
@@ -361,6 +367,19 @@ struct CraftRailSlot: View {
             }
             .shadow(color: .black.opacity(isSelected ? 0.25 : 0), radius: 3, y: 1)
             .contentShape(.circle)
+            .craftHoverHighlight(in: .circle)
+    }
+}
+
+extension View {
+    /// The pointer's highlight over a control drawn in a plain button style, in `shape` (the
+    /// system's styles bring their own).
+    func craftHoverHighlight(in shape: some Shape) -> some View {
+        #if os(iOS)
+            contentShape(.hoverEffect, shape).hoverEffect(.highlight)
+        #else
+            self
+        #endif
     }
 }
 

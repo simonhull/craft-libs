@@ -23,6 +23,19 @@ import Testing
         #expect(abs(CraftNumberView.position(of: 50, in: 1...10000, scale: .log) - log10(50) / 4) < 1e-12)
     }
 
+    /// A few steps are marked on the track where the slider puts them; many, none, or a log
+    /// scale's are not.
+    @Test func aFewStepsAreTicksOnTheTrack() {
+        #expect(CraftNumberView.tickPositions(in: 0...4, step: 1, scale: .linear) == [0, 0.25, 0.5, 0.75, 1])
+        #expect(CraftNumberView.tickPositions(in: 1...9, step: 4, scale: .linear) == [3.0 / 8, 7.0 / 8], "multiples of the step, inside the range")
+        #expect(CraftNumberView.tickPositions(in: 0...20, step: 1, scale: .linear).isEmpty, "21 steps are too many to mark")
+        #expect(CraftNumberView.tickPositions(in: 0...19, step: 1, scale: .linear).count == 20)
+        #expect(CraftNumberView.tickPositions(in: 0...1, step: nil, scale: .linear).isEmpty)
+        #expect(CraftNumberView.tickPositions(in: 1...8, step: 1, scale: .log).isEmpty)
+        #expect(CraftNumberView.tickPositions(in: 3...3, step: 1, scale: .linear).isEmpty, "an empty range")
+        #expect(CraftNumberView.tickPositions(in: 0...1, step: .infinity, scale: .linear).isEmpty)
+    }
+
     @Test func aLogPositionRoundTrips() {
         let range = 0.5...5000.0
         for value in [0.5, 1, 3.7, 24, 999, 5000] {

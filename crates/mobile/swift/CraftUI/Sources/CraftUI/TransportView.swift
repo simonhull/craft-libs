@@ -128,6 +128,7 @@ public struct CraftTransportView: View {
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
+        .craftHoverHighlight(in: .circle)
         .accessibilityLabel(label)
         .accessibilityShowsLargeContentViewer { Label(label, systemImage: symbol) }
         .help(label)

@@ -189,6 +189,8 @@ public struct CraftShell: View {
                         .padding(.top, 20)
                         .transition(.move(edge: .top).combined(with: .opacity))
                         .task {
+                            // Not focused, so VoiceOver wouldn't otherwise say it.
+                            AccessibilityNotification.Announcement(notice).post()
                             try? await Task.sleep(for: .seconds(2))
                             bridge.notice = nil
                         }
@@ -232,11 +234,15 @@ public struct CraftShell: View {
     @ViewBuilder private var inspectorContent: some View {
         switch inspector {
         case .items:
-            CraftItemsPanel(snapshot: bridge.snapshot, perform: bridge.perform)
-                .inspectorColumnWidth(min: 240, ideal: 300, max: 400)
+            NavigationStack {
+                CraftItemsPanel(snapshot: bridge.snapshot, perform: bridge.perform)
+                    .craftPanelCloseButton { closeInspector() }
+            }
+            .inspectorColumnWidth(min: 240, ideal: 300, max: 400)
         case let .panel(id):
             NavigationStack {
                 CraftPanelHost(bridge: bridge, id: id)
+                    .craftPanelCloseButton { closeInspector() }
             }
             // Another panel is another view: none of this one's state (a drag, a collapsed
             // section, the scroll position) carries over.
@@ -255,6 +261,10 @@ public struct CraftShell: View {
                 inspectorShown = true
             }
         }
+    }
+
+    private func closeInspector() {
+        withAnimation { inspectorShown = false }
     }
 
     private func isShowing(_ which: CraftInspector) -> Bool {
@@ -296,7 +306,7 @@ public struct CraftShell: View {
         .padding(6)
         .craftGlass(.regular.interactive(), in: .capsule)
 
-        tool(snapshot.itemsTitle, "square.3.layers.3d") { toggleInspector(.items) }
+        CraftToolButton(label: snapshot.itemsTitle, symbol: "square.3.layers.3d", isOn: isShowing(.items)) { toggleInspector(.items) }
             .padding(6)
             .craftGlass(isShowing(.items) ? .regular.tint(.accentColor).interactive() : .regular.interactive(), in: .circle)
     }

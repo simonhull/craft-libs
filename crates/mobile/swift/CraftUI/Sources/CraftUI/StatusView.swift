@@ -117,7 +117,13 @@ public struct CraftStatusView: View {
         .onChange(of: status.message, initial: true) { _, message in
             // Cleared, the same message may come back as news.
             if message == nil { dismissed = nil }
+            let old = toast.map(Self.identity)
             toast = Self.shown(message, dismissed: dismissed)
+            // A toast isn't focused, so VoiceOver says a new one; new text for the same one (a
+            // countdown) it doesn't, as it isn't news.
+            if let toast, let announcement = Self.announcement(toast, replacing: old) {
+                AccessibilityNotification.Announcement(announcement).post()
+            }
         }
     }
 
@@ -135,6 +141,13 @@ public struct CraftStatusView: View {
     /// otherwise its text and tone.
     nonisolated static func identity(_ message: CraftStatus.Message) -> Identity {
         message.id == 0 ? .unnumbered(message.text, message.tone) : .numbered(message.id)
+    }
+
+    /// What VoiceOver says when `message` shows where the toast `old` was: its text (an error
+    /// says so) when it is a new toast; nothing when it is the same one with new text.
+    nonisolated static func announcement(_ message: CraftStatus.Message, replacing old: Identity?) -> String? {
+        guard identity(message) != old else { return nil }
+        return message.tone == .error ? "Error: \(message.text)" : message.text
     }
 
     /// The toast for the status's `message`: none once that message was dismissed (it timed out or

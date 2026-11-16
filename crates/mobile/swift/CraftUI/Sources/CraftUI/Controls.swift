@@ -84,37 +84,43 @@ struct CraftNumberView: View {
                     typed = Self.format(shown, unit, withUnit: false, locale: locale)
                     typing = true
                 } label: {
-                    // The value in the label's colour on a light fill: it reads as a field to
-                    // tap, and at full contrast on a popover's glass, where the accent didn't.
                     Text(formatted)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(.fill.tertiary, in: .capsule)
-                        .frame(minHeight: 44)
-                        .contentShape(Rectangle())
                 }
                 .monospacedDigit()
-                .buttonStyle(.borderless)
+                // The system's bordered capsule, in the label's colour: it reads as a field to tap,
+                // and at full contrast on a popover's glass, where the accent didn't.
+                .buttonStyle(.bordered)
+                .buttonBorderShape(.capsule)
                 .tint(isEnabled ? .primary : .secondary)
+                .frame(minHeight: 44)
+                .contentShape(.rect)
                 .accessibilityLabel(label)
                 .accessibilityValue(formatted)
                 .accessibilityHint("Type a value")
             }
+            // A few steps are marked on the track (the system's ticks), each felt as the drag
+            // crosses it; many would be a grey bar and a buzz.
+            let ticks = Self.tickPositions(in: range, step: step, scale: scale)
             // The setter runs only for the user's own input, never when the app's value changes.
             Slider(
                 value: Binding(
                     get: { Self.position(of: shown, in: range, scale: scale) },
                     set: { slide(to: Self.value(atPosition: $0, in: range, scale: scale)) }),
-                in: 0...1
-            ) { editing in
-                if editing {
-                    emit(hold.begin(from: value))
-                } else if let step = hold.commit() {
-                    emit(step)
+                in: 0...1,
+                // Named below, once: a label here and the modifier's would be read together.
+                label: { EmptyView() },
+                ticks: { SliderTickContentForEach(ticks, id: \.self) { SliderTick($0) } },
+                onEditingChanged: { editing in
+                    if editing {
+                        emit(hold.begin(from: value))
+                    } else if let step = hold.commit() {
+                        emit(step)
+                    }
                 }
-            }
+            )
             .accessibilityLabel(label)
             .accessibilityValue(formatted)
+            .sensoryFeedback(.selection, trigger: shown) { _, _ in hold.isDragging && !ticks.isEmpty }
         }
         // A new description, or a new value (a host that doesn't count descriptions): an ended
         // drag's value gives way to the app's.
@@ -181,6 +187,20 @@ struct CraftNumberView: View {
 
     private nonisolated static func isLog(_ scale: CraftNode.Scale, _ range: ClosedRange<Double>) -> Bool {
         scale == .log && range.lowerBound > 0
+    }
+
+    /// The most steps a number's track marks.
+    nonisolated static let maxTicks = 20
+
+    /// Where a stepped number's steps sit on the slider (0...1), for its tick marks: none when
+    /// it has no step, more than ``maxTicks`` of them, or a log scale (whose steps bunch up).
+    nonisolated static func tickPositions(in range: ClosedRange<Double>, step: Double?, scale: CraftNode.Scale) -> [Double] {
+        let (lo, hi) = (range.lowerBound, range.upperBound)
+        guard let step, step.isFinite, step > 0, hi > lo, !isLog(scale, range) else { return [] }
+        let first = (lo / step).rounded(.up)
+        let last = (hi / step).rounded(.down)
+        guard last >= first, last - first < Double(maxTicks) else { return [] }
+        return stride(from: first, through: last, by: 1).map { (($0 * step) - lo) / (hi - lo) }
     }
 
     /// The value as shown, in `locale`, never grouped (so it can fill the typing field and parse back).

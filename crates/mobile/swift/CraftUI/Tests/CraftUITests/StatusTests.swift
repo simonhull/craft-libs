@@ -70,6 +70,16 @@ import Testing
         #expect(CraftStatusView.identity(a) == CraftStatusView.identity(CraftStatus.Message(text: "Retrying in 3 s")))
     }
 
+    /// VoiceOver hears a new toast, an error as one; not a countdown's next second.
+    @Test func aNewToastIsAnnouncedAndNewTextForItIsNot() {
+        let tick = CraftStatus.Message(text: "Retrying in 9 s", tone: .error, id: 4)
+        #expect(CraftStatusView.announcement(tick, replacing: nil) == "Error: Retrying in 9 s")
+        let next = CraftStatus.Message(text: "Retrying in 8 s", tone: .error, id: 4)
+        #expect(CraftStatusView.announcement(next, replacing: CraftStatusView.identity(tick)) == nil)
+        let saved = CraftStatus.Message(text: "Saved a.psd")
+        #expect(CraftStatusView.announcement(saved, replacing: CraftStatusView.identity(tick)) == "Saved a.psd")
+    }
+
     @Test func anErrorStaysLonger() {
         #expect(CraftStatusView.duration(.error) > CraftStatusView.duration(.info))
     }
