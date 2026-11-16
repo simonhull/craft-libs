@@ -185,7 +185,7 @@ public struct CraftShell: View {
                     Label(notice, systemImage: "checkmark.circle.fill")
                         .padding(.horizontal, 16)
                         .padding(.vertical, 10)
-                        .glassEffect(.regular, in: .capsule)
+                        .craftGlass(in: .capsule)
                         .padding(.top, 20)
                         .transition(.move(edge: .top).combined(with: .opacity))
                         .task {
@@ -285,7 +285,7 @@ public struct CraftShell: View {
                 .disabled(snapshot.document == nil)
         }
         .padding(6)
-        .glassEffect(.regular.interactive(), in: .capsule)
+        .craftGlass(.regular.interactive(), in: .capsule)
 
         HStack(spacing: 4) {
             tool("Undo", "arrow.uturn.backward") { bridge.perform(.undo) }
@@ -294,11 +294,11 @@ public struct CraftShell: View {
                 .disabled(!snapshot.canRedo)
         }
         .padding(6)
-        .glassEffect(.regular.interactive(), in: .capsule)
+        .craftGlass(.regular.interactive(), in: .capsule)
 
         tool(snapshot.itemsTitle, "square.3.layers.3d") { toggleInspector(.items) }
             .padding(6)
-            .glassEffect(isShowing(.items) ? .regular.tint(.accentColor).interactive() : .regular.interactive(), in: .circle)
+            .craftGlass(isShowing(.items) ? .regular.tint(.accentColor).interactive() : .regular.interactive(), in: .circle)
     }
 
     /// Open each photo as the app opens a file, in the library's own format (HEIC stays HEIC).
@@ -327,7 +327,7 @@ struct CraftShellMenus: View {
         if !menus.bar.menus.isEmpty {
             CraftMenuButton(menus: menus)
                 .padding(6)
-                .glassEffect(.regular.interactive(), in: .circle)
+                .craftGlass(.regular.interactive(), in: .circle)
         }
     }
 }

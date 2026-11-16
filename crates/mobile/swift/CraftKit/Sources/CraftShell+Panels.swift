@@ -48,7 +48,7 @@ struct CraftPanelTools: View {
     private func button(_ info: CraftPanelInfo, open: Bool, action: @escaping () -> Void) -> some View {
         CraftToolButton(label: info.accessibilityName, symbol: info.icon, action: action)
             .padding(6)
-            .glassEffect(open ? .regular.tint(.accentColor).interactive() : .regular.interactive(), in: .circle)
+            .craftGlass(open ? .regular.tint(.accentColor).interactive() : .regular.interactive(), in: .circle)
             .accessibilityAddTraits(open ? .isSelected : [])
     }
 }
