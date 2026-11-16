@@ -127,7 +127,7 @@ A titled group of other nodes; the user can collapse it.
 
 ## `item_list`
 
-Rows of items such as layers, top to bottom: tap to select, swipe to hide, long-press for Rename and the row's own actions, drag to reorder. The list's own actions (New Layer) are icon buttons in its footer. Select in the header picks several rows, tap by tap, until Done; with a keyboard, Shift-tap selects a range and Command-tap adds or removes a row.
+Rows of items such as layers, top to bottom: tap to select, swipe to hide, long-press for Rename and the row's own actions, drag to reorder. The list's own actions (New Layer) are icon buttons in its footer. Select beside the list's actions picks several rows, tap by tap, until Done; with a keyboard, Shift-tap selects a range and Command-tap adds or removes a row.
 
 **Fields:** each row's `id` is the app's own and unique in the list; `depth` indents it (inside groups); `visible: null` means it can't be hidden; `reorderable` allows dragging. A row's `actions` (left out: none) are what the user can do to it, in its context menu after Rename: each has an `id` unique in the row, a `label`, an `icon` (an SF Symbol name, or `null`) and `destructive` (tinted red, and a trailing swipe action too); `icon` and `destructive` may be left out. `rename: "no"` takes Rename… away from a row with no name of its own to change (an open document); left out, a row can be renamed. The list's own `actions` (left out: none) are what the user can do to the list rather than to one row, as icon buttons in its footer: the same fields, `id`s unique among them; the `label` names the button for accessibility and as its tooltip, and shows in place of a missing `icon`.
 
