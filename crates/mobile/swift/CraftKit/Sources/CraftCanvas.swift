@@ -535,6 +535,8 @@ public final class CraftCanvasView: UIView, UIGestureRecognizerDelegate, UIPenci
 /// - `CRAFT_DEMO_OPEN="/path/a.png;/path/b.psd"`: opens those files as if the system handed them
 ///   over in place (Files' Open in place): Save writes them back. `CRAFT_DEMO_OPEN_COPY` opens
 ///   them as copies (as a share or the Photos library hands them over): Save goes to the exporter.
+///   A path without a leading `/` is inside the app's home folder (`tmp/a.png`), for a device
+///   where the container's absolute path isn't known.
 /// - `command:<id>` in `CRAFT_DEMO_ACTIONS` runs one of the app's commands as its menu item does
 ///   (`command:file.saveAs`).
 /// - `CRAFT_DEMO_STEP=<seconds>`: the time between steps (1.5 s).
@@ -558,11 +560,13 @@ enum CraftDevelopment {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { MainActor.assumeIsolated(step) }
             delay += spacing
         }
+        let home = URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true)
+        let file = { (path: Substring) in path.hasPrefix("/") ? URL(fileURLWithPath: String(path)) : home.appendingPathComponent(String(path)) }
         for path in (env["CRAFT_DEMO_OPEN"] ?? "").split(separator: ";") {
-            after { CraftBridge.shared.open([URL(fileURLWithPath: String(path))]) }
+            after { CraftBridge.shared.open([file(path)]) }
         }
         for path in (env["CRAFT_DEMO_OPEN_COPY"] ?? "").split(separator: ";") {
-            after { CraftBridge.shared.open([URL(fileURLWithPath: String(path))], inPlace: false) }
+            after { CraftBridge.shared.open([file(path)], inPlace: false) }
         }
         for (index, pair) in (env["CRAFT_DEMO_TAPS"] ?? "").split(separator: ";").enumerated() {
             let xy = pair.split(separator: ",").compactMap { Float($0) }
