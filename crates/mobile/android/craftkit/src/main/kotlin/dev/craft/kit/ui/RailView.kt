@@ -30,8 +30,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.VerticalFloatingToolbar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -130,13 +130,15 @@ fun CraftRail(
         Row(modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(SPACING)) { tools() }
         return
     }
-    Surface(
-        modifier = modifier.width(64.dp),
-        shape = RoundedCornerShape(32.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shadowElevation = 3.dp,
+    // The options button stays in the toolbar's own column, after the tools that scroll, so it
+    // never scrolls away: a trailing slot would be squeezed out by a rail of many tools.
+    VerticalFloatingToolbar(
+        expanded = true,
+        modifier = modifier,
+        colors = floatingChromeColors(),
+        expandedShadowElevation = FLOATING_ELEVATION,
     ) {
-        Column(Modifier.padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(Modifier.weight(1f, fill = false).touchTargetsAtEdges(), horizontalAlignment = Alignment.CenterHorizontally) {
             Column(
                 Modifier.weight(1f, fill = false).verticalScroll(scroll),
                 verticalArrangement = Arrangement.spacedBy(SPACING),

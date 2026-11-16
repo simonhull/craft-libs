@@ -23,11 +23,11 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -109,12 +109,14 @@ fun CraftTransport(transport: Transport, panel: String, send: (Edit) -> Unit, mo
         }
     }
     when (style) {
-        TransportStyle.Bar -> Surface(
+        TransportStyle.Bar -> HorizontalFloatingToolbar(
+            expanded = true,
             modifier = modifier.widthIn(max = 760.dp),
+            colors = floatingChromeColors(),
+            // A toolbar's full round, as long as the bar is one row; two rows keep the same corners.
             shape = RoundedCornerShape(36.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            shadowElevation = 3.dp,
-        ) { Box(Modifier.padding(horizontal = 8.dp, vertical = 8.dp)) { content() } }
+            expandedShadowElevation = FLOATING_ELEVATION,
+        ) { content() }
         TransportStyle.Inline -> Box(modifier.fillMaxWidth()) { content() }
     }
 }
