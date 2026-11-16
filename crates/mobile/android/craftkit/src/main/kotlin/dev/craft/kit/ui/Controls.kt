@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenu
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
@@ -39,6 +40,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.SliderState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -162,8 +164,10 @@ internal fun CraftNumber(node: Node.Number, panel: String, send: (Edit) -> Unit,
         val range = node.range
         // The thumb hears the slider's own presses and drags.
         val interaction = remember { MutableInteractionSource() }
+        val state = remember { SliderState() }
+        state.value = NumberMath.position(shown, range, node.scale).toFloat()
         Slider(
-            value = NumberMath.position(shown, range, node.scale).toFloat(),
+            state = state,
             onValueChange = { t ->
                 val new = NumberMath.snap(NumberMath.valueAt(t.toDouble(), range, node.scale), node.step, range)
                 if (!hold.isDragging) emit(hold.begin(node.value))
@@ -185,6 +189,7 @@ internal fun CraftNumber(node: Node.Number, panel: String, send: (Edit) -> Unit,
             thumb = {
                 SliderDefaults.Thumb(
                     interactionSource = interaction,
+                    isVertical = false,
                     enabled = node.enabled,
                     thumbSize = DpSize(4.dp, 44.dp),
                 )

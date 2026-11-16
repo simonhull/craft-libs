@@ -22,7 +22,9 @@ android {
 dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2026.09.00")
     implementation(composeBom)
-    api("androidx.compose.material3:material3")
+    // Pinned over the BOM: 1.5 makes Material 3 Expressive public (MaterialExpressiveTheme, the
+    // connected button group, wavy progress, floating toolbars).
+    api("androidx.compose.material3:material3:1.5.0-rc01")
     api("androidx.compose.ui:ui")
     implementation("androidx.activity:activity-compose:1.13.0")
     implementation("androidx.core:core-ktx:1.18.0")

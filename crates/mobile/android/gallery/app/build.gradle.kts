@@ -41,6 +41,8 @@ androidComponents {
 dependencies {
     implementation(project(":craftkit"))
     implementation(platform("androidx.compose:compose-bom:2026.09.00"))
+    // The same material3 as craftkit, over the BOM's.
+    implementation("androidx.compose.material3:material3:1.5.0-rc01")
     implementation("androidx.activity:activity-compose:1.13.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.12.0")
     implementation("androidx.compose.material:material-icons-extended:1.7.8")

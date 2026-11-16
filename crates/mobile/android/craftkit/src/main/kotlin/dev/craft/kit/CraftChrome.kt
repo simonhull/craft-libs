@@ -37,7 +37,9 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconToggleButton
+import androidx.compose.material3.MaterialExpressiveTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -70,15 +72,14 @@ import dev.craft.kit.ui.Feature
 import dev.craft.kit.ui.ProvideCraftUi
 
 /**
- * Material 3 for a Craft app: dark, as editors around an image are (the canvas reads truer on
- * dark chrome), in the device's own colors where it has them. (`MaterialExpressiveTheme` and the
- * expressive motion scheme are internal in this Compose BOM's material3; the native panels draw
- * their expressive shapes themselves.)
+ * Material 3 Expressive for a Craft app: dark, as editors around an image are (the canvas reads
+ * truer on dark chrome), in the device's own colors where it has them, with the expressive motion
+ * scheme (springier shape and size changes).
  */
 @Composable
 fun CraftTheme(content: @Composable () -> Unit) {
     val scheme: ColorScheme = if (Build.VERSION.SDK_INT >= 31) dynamicDarkColorScheme(LocalContext.current) else darkColorScheme()
-    MaterialTheme(colorScheme = scheme, content = content)
+    MaterialExpressiveTheme(colorScheme = scheme, motionScheme = MotionScheme.expressive(), content = content)
 }
 
 /**
