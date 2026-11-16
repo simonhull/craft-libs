@@ -78,6 +78,22 @@ internal class NativeChrome(inspector: String? = null, popover: String? = null, 
     /** The Tool panel the rail opened for the selected tool's options. */
     var railOptions by mutableStateOf(railOptions)
 
+    /**
+     * Opens inspector [id] (`null` closes it). The inspector and a tool's popover share the trailing
+     * edge, so one replaces the other: a popover over the side sheet would leave the inspector
+     * peeking out behind it.
+     */
+    fun openInspector(id: String?) {
+        inspector = id
+        if (id != null) popover = null
+    }
+
+    /** Opens tool panel [id] in its popover (`null` closes it), in place of an open inspector. */
+    fun openPopover(id: String?) {
+        popover = id
+        if (id != null) inspector = null
+    }
+
     companion object {
         val saver: Saver<NativeChrome, *> = listSaver(
             save = { listOf(it.inspector, it.popover, it.railOptions) },
@@ -127,8 +143,8 @@ internal fun NativeChromeEffects(ui: CraftUi, shell: NativeChrome, nativePanels:
         ui.openRequestHandled()
         val info = ui.panels.firstOrNull { it.id == request.id }
         when (info?.role) {
-            PanelRole.Inspector -> shell.inspector = info.id
-            PanelRole.Tool -> shell.popover = info.id
+            PanelRole.Inspector -> shell.openInspector(info.id)
+            PanelRole.Tool -> shell.openPopover(info.id)
             // Always on screen while the shell shows them.
             PanelRole.Rail, PanelRole.Transport -> Unit
             null -> Log.d("craftkit", "the app asked to open panel ${request.id}, which it doesn't offer")
@@ -143,9 +159,9 @@ internal fun PanelButtons(ui: CraftUi, shell: NativeChrome, layout: ChromeLayout
     for (info in ui.panels) {
         key(info.id) {
             when (info.role) {
-                PanelRole.Inspector -> PanelButton(info, shell.inspector == info.id) { shell.inspector = if (it) info.id else null }
+                PanelRole.Inspector -> PanelButton(info, shell.inspector == info.id) { shell.openInspector(if (it) info.id else null) }
                 PanelRole.Tool -> Box {
-                    PanelButton(info, shell.popover == info.id) { shell.popover = if (it) info.id else null }
+                    PanelButton(info, shell.popover == info.id) { shell.openPopover(if (it) info.id else null) }
                     if (shell.popover == info.id) {
                         val close = { if (shell.popover == info.id) shell.popover = null }
                         if (layout.compact) {
