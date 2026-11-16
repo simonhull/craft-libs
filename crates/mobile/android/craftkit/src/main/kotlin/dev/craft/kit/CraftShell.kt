@@ -108,8 +108,12 @@ internal class NativeChrome(inspector: String? = null, popover: String? = null, 
 @Composable
 internal fun rememberNativeChrome(): NativeChrome = rememberSaveable(saver = NativeChrome.saver) { NativeChrome() }
 
-/** Where panels go at this window size. */
-internal data class ChromeLayout(val sideSheet: Boolean, val compact: Boolean) {
+/**
+ * Where [CraftScaffold] puts panels at a window size, asked again whenever the window is resized:
+ * an inspector in a side sheet ([sideSheet]) or a bottom sheet, a tool in a popover or, when
+ * [compact], a bottom sheet. An app that lays out its own panels (the Gallery) follows it too.
+ */
+data class ChromeLayout(val sideSheet: Boolean, val compact: Boolean) {
     companion object {
         /** An inspector is a side sheet in landscape (a bottom sheet in portrait); tools are popovers unless the window is compact. */
         fun of(width: Dp, height: Dp) = ChromeLayout(sideSheet = width > height && width >= 600.dp, compact = width < 600.dp)
