@@ -189,6 +189,8 @@ public struct CraftShell: View {
                         .padding(.top, 20)
                         .transition(.move(edge: .top).combined(with: .opacity))
                         .task {
+                            // Not focused, so VoiceOver wouldn't otherwise say it.
+                            AccessibilityNotification.Announcement(notice).post()
                             try? await Task.sleep(for: .seconds(2))
                             bridge.notice = nil
                         }
