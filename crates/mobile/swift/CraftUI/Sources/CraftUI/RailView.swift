@@ -199,7 +199,7 @@ public struct CraftRailView<Options: View>: View {
                 Divider().frame(width: axis == .vertical ? 32 : nil, height: axis == .horizontal ? 32 : nil)
                 Button { open(route) } label: {
                     Image(systemName: "slider.horizontal.3")
-                        .font(.title3)
+                        .font(CraftToolFace.symbolFont)
                         .frame(width: 44, height: 44)
                         .contentShape(.rect)
                 }
@@ -211,7 +211,7 @@ public struct CraftRailView<Options: View>: View {
             }
         }
         .padding(6)
-        .glassEffect(.regular, in: .capsule)
+        .craftGlass(in: .capsule)
         .onChange(of: palette) { _, palette in
             guard let tool = pendingOptions, palette.selected == tool else { return }
             pendingOptions = nil
@@ -281,23 +281,31 @@ struct CraftRailSlot: View {
         Group {
             if slot.tools.count > 1 {
                 Menu {
-                    ForEach(slot.tools) { other in
-                        Button { tap(other.id) } label: {
-                            if other.id == selected {
-                                Label(other.label, systemImage: "checkmark")
-                            } else {
-                                Text(other.label)
+                    // A picker, so the menu keeps one column for the check mark and every tool's
+                    // name lines up, checked or not; each with its symbol and its shortcut.
+                    Picker("Tools", selection: Binding(get: { selected }, set: { tap($0) })) {
+                        ForEach(slot.tools) { other in
+                            Button {} label: {
+                                if case let .symbol(name) = other.icon.shown(label: other.label) {
+                                    Label(other.label, systemImage: name)
+                                } else {
+                                    Text(other.label)
+                                }
+                                if let keys = Self.glyphs(other) { Text(keys) }
                             }
-                            if let keys = Self.glyphs(other) { Text(keys) }
+                            .tag(other.id)
                         }
                     }
+                    .pickerStyle(.inline)
+                    .labelsHidden()
                 } label: {
                     face(isSelected).overlay(alignment: .bottomTrailing) {
+                        // Solid, in the face's own colour: it must read on the glass and on the
+                        // accent alike, as the tool's symbol does.
                         Image(systemName: "arrowtriangle.right.fill")
-                            .font(.system(size: 6))
+                            .font(.system(size: 7, weight: .bold))
                             .rotationEffect(.degrees(45))
-                            .opacity(0.7)
-                            .padding(5)
+                            .padding(4)
                             .accessibilityHidden(true)
                     }
                     .modifier(SelectedForeground(selected: isSelected))
@@ -347,6 +355,11 @@ struct CraftRailSlot: View {
         CraftToolFace(icon: tool.icon.shown(label: tool.label))
             .frame(width: 44, height: 44)
             .background(isSelected ? Color.accentColor : Color.clear, in: .circle)
+            // A light rim and a shadow lift the selected tool off the glass, whatever's behind it.
+            .overlay {
+                if isSelected { Circle().strokeBorder(.white.opacity(0.35), lineWidth: 1) }
+            }
+            .shadow(color: .black.opacity(isSelected ? 0.25 : 0), radius: 3, y: 1)
             .contentShape(.circle)
     }
 }
@@ -366,10 +379,13 @@ struct CraftToolFace: View {
 
     var body: some View {
         switch icon {
-        case let .symbol(name): Image(systemName: name).font(.title3)
+        case let .symbol(name): Image(systemName: name).font(Self.symbolFont)
         case let .letter(letter): Text(letter).font(.title3.weight(.semibold).monospaced())
         }
     }
+
+    /// A tool's symbol: medium weight, so its strokes hold up on glass over a busy canvas.
+    static let symbolFont = Font.title3.weight(.medium)
 }
 
 #if DEBUG
