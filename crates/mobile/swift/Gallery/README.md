@@ -60,3 +60,8 @@ xcrun simctl launch booted dev.craft.Gallery -selection item_list
 
 `-selection <name>` opens a primitive by its catalogue name (or `everything`); the Gallery
 otherwise reopens the last one picked.
+
+`-backdrop white` (or `black`, `busy`, `plain`) puts a canvas behind the detail, as the toolbar's
+Backdrop menu does, to judge the floating chrome (rail, transport bar, status) over what an app
+shows. For screenshots, `-inspector NO` starts with the inspector closed and `-popover YES` opens
+the Popover at launch.

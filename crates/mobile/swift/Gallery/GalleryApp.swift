@@ -72,8 +72,11 @@ struct GalleryDetail: View {
     let store: GalleryStore
     let panel: (CraftPanelInfo.Role) -> CraftPanel
 
-    @State private var showsInspector = true
-    @State private var showsPopover = false
+    /// `-inspector NO` on the command line starts with it closed, for screenshots of the detail.
+    @State private var showsInspector = UserDefaults.standard.object(forKey: "inspector") == nil || UserDefaults.standard.bool(forKey: "inspector")
+    /// `-popover YES` on the command line opens it at launch, for screenshots.
+    @State private var showsPopover = UserDefaults.standard.bool(forKey: "popover")
+    @AppStorage("backdrop") private var backdrop = GalleryBackdrop.plain
 
     var body: some View {
         List {
@@ -92,9 +95,11 @@ struct GalleryDetail: View {
                 }
             }
         }
+        .galleryBackdrop(backdrop)
         .navigationTitle(title)
         .toolbar {
             ToolbarItemGroup {
+                GalleryBackdropPicker(backdrop: $backdrop)
                 Button("Clear Log", systemImage: "trash") { store.clearLog() }
                     .disabled(store.log.isEmpty)
                 Button("Popover", systemImage: "rectangle.on.rectangle") { showsPopover.toggle() }
@@ -262,6 +267,7 @@ struct GalleryStatusDetail: View {
     @Bindable var store: GalleryStore
     /// The countdown's ticks: one message, its text changing each second.
     @State private var countdown: Task<Void, Never>?
+    @AppStorage("backdrop") private var backdrop = GalleryBackdrop.plain
 
     var body: some View {
         List {
@@ -279,7 +285,9 @@ struct GalleryStatusDetail: View {
                 }
             }
         }
+        .galleryBackdrop(backdrop)
         .navigationTitle("status")
+        .toolbar { GalleryBackdropPicker(backdrop: $backdrop) }
         .overlay {
             CraftStatusView(status: store.status) { store.logMessage(CraftChromeMessage.command($0)) }
         }
